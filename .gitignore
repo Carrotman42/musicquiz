@@ -1,0 +1,4 @@
+# local vim files
+*.swp
+*.swo
+*~
