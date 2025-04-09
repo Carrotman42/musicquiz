@@ -704,50 +704,73 @@ func longestMutualSubstring(a, b string) (result string) {
 	return fromA
 }
 
-// case-sensitive (do normalizing first)
-func findGuessSubstring(target, guess string) (score float64) {
-	if !strings.Contains(target, guess) {
-		return 0
-	}
-	return float64(len(guess)) / float64(len(target))
-}
-
 var ftParentheticalRegexp = regexp.MustCompile(` ?\((ft|feat|featuring)\.?[^)]+\)`)
 
 func calcSimilarity(target, guess string) (score float64) {
-	//defer func() {
-	//	fmt.Printf("calSimilarity(%q, %q) -> %v\n", target, guess, score)
-	//}()
-
-	score = calcSimilarityDirect(target, guess)
-	if score >= minCorrectSongScore {
-		return score
-	}
-
-	if withoutFeat := ftParentheticalRegexp.ReplaceAllLiteralString(target, ""); withoutFeat != target {
-		// TODO: slightly fewer points for missing the parenthetical?
-		// it'd be nice to not do that unless anyone got it right, but
-		// maybe it doesn't matter.
-		score2 := calcSimilarityDirect(withoutFeat, guess)
-		score = max(score, score2)
-	}
-	return score
-}
-
-func calcSimilarityDirect(target, guess string) float64 {
+	// Quick exit if it's a perfect guess
 	if strings.EqualFold(target, guess) {
 		return 1
 	}
-	target, guess = strings.ToLower(target), strings.ToLower(guess)
-	if score := findGuessSubstring(target, guess); score > 0 {
-		return score
+
+	// Normalize both strings for a fair comparison
+	// (TODO: Give bonus points for matching the parenthetical later?)
+	target = ftParentheticalRegexp.ReplaceAllLiteralString(target, "")
+	guess = ftParentheticalRegexp.ReplaceAllLiteralString(guess, "")
+	target = strings.ToLower(strings.TrimSpace(target))
+	guess = strings.ToLower(strings.TrimSpace(guess))
+
+	// Quick-ish exit if it's a perfect guess after normalization
+	if strings.EqualFold(target, guess) {
+		return 1
 	}
-	// More expensive analysis:
-	if mutual := longestMutualSubstring(target, guess); mutual != "" {
-		// technically should use rune length, but whatever.
-		maxLen := max(len(target), len(guess))
-		return float64(len(mutual)) / float64(maxLen)
+
+	// Otherwise, check similarity
+	dist := editDistance(target, guess)
+	diff := float64(dist) / float64(len(target))
+	return max(0.0, 1.0 - diff)
+}
+
+func editDistance(target string, guess string) (distance int) {
+	// Quick exit: Empty strings are easy
+	if len(guess) == 0 {
+		return len(target)
+	} else if len(target) == 0 {
+		return len(guess)
 	}
-	// Not similar at all.
-	return 0
+
+	editDistances := make([][]int, len(target) + 1)
+	for i := range editDistances {
+		editDistances[i] = make([]int, len(guess) + 1)
+	}
+
+	// Distance from target[0:i] to "" is i insertions
+	for i := range len(target) + 1 {
+		editDistances[i][0] = i
+	}
+
+	// Distance from "" to guess[0:i] is i deletions
+	for i := range len(guess) + 1 {
+		editDistances[0][i] = i
+	}
+
+	// Distance from target[0:i] to guess[0:j] is:
+	//  - ED(i-1, j-1) if target[i] == target[j]
+	//  - Otherwise, minimum of:
+	//    * Inserting target[i]: ED(i-1, j) + 1
+	//    * Deleting guess[j]:   ED(i, j-1) + 1
+	//    * Editing guess[j]:    ED(i-1, j-1) + 1
+	for i := 1; i <= len(target); i++ {
+		for j := 1; j <= len(guess); j++ {
+			if target[i-1] == guess[j-1] {
+				editDistances[i][j] = editDistances[i-1][j-1]
+			} else {
+				insertion := 1 + editDistances[i-1][j]
+				deletion := 1 + editDistances[i][j-1]
+				edition := 1 + editDistances[i-1][j-1]
+				editDistances[i][j] = min(insertion, min(deletion, edition))
+			}
+		}
+	}
+
+	return editDistances[len(target)][len(guess)]
 }
