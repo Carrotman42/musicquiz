@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 	"unsafe"
 )
 
@@ -649,59 +648,6 @@ func (mg *multiguessGame) ResetTimer() {
 	defer mg.mu.Unlock()
 
 	mg.lastTimestamp = time.Now()
-}
-
-// if there are multiple of the same length, it returns the earlier match.
-func longestMutualSubstring(a, b string) (result string) {
-	// Make len(a) >= len(b)
-	if len(a) < len(b) {
-		a, b = b, a
-	}
-
-	szA, szB := utf8.RuneCountInString(a), utf8.RuneCountInString(b)
-	mem := make([]int, szA*szB)
-	memAt := func(posA, posB int) *int {
-		return &mem[posA*szB+posB]
-	}
-	maxVal, maxPosA, maxPosB := 0, -1, -1
-	iA := 0
-	for _, rA := range a {
-		iB := 0
-		// TODO: map check instead of another for loop
-		// i.e. rune -> []indexes in 'b'
-		for _, rB := range b {
-			if rB == rA {
-				past := 0
-				if iA > 0 && iB > 0 {
-					past = *memAt(iA-1, iB-1)
-				}
-				cur := 1 + past
-				*memAt(iA, iB) = cur
-				if cur > maxVal {
-					maxVal, maxPosA, maxPosB = cur, iA, iB
-				}
-			}
-			iB++
-		}
-		iA++
-	}
-	if maxVal == 0 {
-		// Wow, really no overlapping characters at all.
-		// return ""
-
-		// TODO: delete this double-check:
-		firstIndex := strings.IndexAny(a, b)
-		if firstIndex != -1 {
-			panic(fmt.Sprintf("bad implementation: maxVal wasn't updated, but there was a match in IndexAny (at index %d): %q vs %q", firstIndex, a, b))
-		}
-		return ""
-	}
-	fromA := a[maxPosA-maxVal+1 : maxPosA+1]
-	fromB := b[maxPosB-maxVal+1 : maxPosB+1]
-	if fromA != fromB {
-		panic(fmt.Sprintf("invalid match for %q vs %q: fromA=%q, fromB=%q; maxVal=%d, maxPosA=%d, maxPosB=%d", a, b, fromA, fromB, maxVal, maxPosA, maxPosB))
-	}
-	return fromA
 }
 
 var ftParentheticalRegexp = regexp.MustCompile(` ?\((ft|feat|featuring)\.?[^)]+\)`)
