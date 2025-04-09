@@ -15,9 +15,7 @@ func TestCalcSimilarity(t *testing.T) {
 		{"abcd", "BC", 0.5},
 
 		// Unicode awareness: Treat as 1/2 code points, not 1/4 characters
-		{ "$€", "$E", 0.5},
-
-		{"abcd (ft. pants)", "abcd (ft. pants)", 1},
+		{"$€", "$E", 0.5},
 		// (two errors vs. four characters in the proper title,
 		// no substring matching any more)
 		{"abcd (ft. pant)", "abcd (", 0.5},
@@ -28,6 +26,27 @@ func TestCalcSimilarity(t *testing.T) {
 		{"abcd (feat banana pants)", "abcd", 1},
 		{"abcd (featuring banana pants)", "abcd", 1},
 		{"abcd (featuring. banana pants)", "abcd", 1},
+
+		// Ignore all parentheticals
+		{"abcd (Taylor's Version)", "abcd", 1},
+		{"abcd (Taylor's Version) (From The Vault)", "abcd", 1},
+		{"abcd (Taylor's Version) [From The Vault]", "abcd", 1},
+		{"abcd [Club Remix]", "abcd", 1},
+		{"abcd", "abcd (Yes I know it's weird that I know this song)", 1},
+
+		// But, if you guess the parenthetical perfectly, get some bonus points
+		// (the parenthetical is 16 which is 4x the length of the title, so you get 2x as many points)
+		{"abcd (ft. banana pants)", "abcd (ft. banana pants)", 3},
+		{"abcd (ft. banana pants)", "ABCD (FT. BANANA PANTS)", 3},
+		// 9 / 4 / 2 = extra 9/8 points
+		{"abcd (ft. pants)", "abcd (ft. pants)", 2.125},
+		// Getting ANY part of the parenthetical incorrect means no bonus points
+		{"abcd (ft. pants)", "abcd (pants)", 1},
+		{"abcd (ft. pants)", "abcd (ft. paints)", 1},
+		// You can still get bonus points if you ONLY know the parenthetical
+		{"abcd (ft. pants)", "I dunno (ft. pants)", 1.125},
+		// Unicode awareness: Treat as 4 code points, not 8 characters
+		{"abcd (€€€€)", "abcd (€€€€)", 1.5},
 
 		// Spaces on the inside matter, spaces on the outside don't
 		{"abcd", "abcd ", 1},
