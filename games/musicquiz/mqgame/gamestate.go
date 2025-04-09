@@ -662,10 +662,8 @@ func calcSimilarity(target, guess string) (score float64) {
 	originalGuess := guess
 
 	// Normalize both strings for a fair comparison
-	fmt.Printf("'%s' vs '%s'", target, guess)
 	target = normalize(parentheticalsRegexp.ReplaceAllLiteralString(target, ""))
 	guess = normalize(parentheticalsRegexp.ReplaceAllLiteralString(guess, ""))
-	fmt.Printf(" normalized to '%s' vs '%s'\n", target, guess)
 
 	// Otherwise, check similarity
 	dist := editDistance(target, guess)
@@ -686,7 +684,6 @@ func calcSimilarity(target, guess string) (score float64) {
 				strings.Count(targetParen, "[") -
 				strings.Count(targetParen, "]")
 			score += float64(parenLen) / float64(len(target)) / 2.0
-			fmt.Printf("Adding %d / %d to score for matching parens '%s'", parenLen, len(target), targetParen)
 		}
 	}
 
@@ -738,6 +735,5 @@ func editDistance(targetStr string, guessStr string) (distance int) {
 		}
 	}
 
-	fmt.Printf("'%v' vs '%v' -> %v\n", target, guess, editDistances)
 	return editDistances[len(target)][len(guess)]
 }
