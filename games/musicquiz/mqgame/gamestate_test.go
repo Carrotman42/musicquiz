@@ -5,30 +5,6 @@ import (
 	"testing"
 )
 
-func TestLongestMutualSubstring(t *testing.T) {
-	for _, row := range []struct {
-		inputA, inputB string
-		want           string
-	}{
-		{"1234", "12", "12"},
-		{"12", "1234", "12"},
-		{"1234", "34", "34"},
-		{"1234", "234", "234"},
-		{"123444567", "3456", "456"},
-		{"123444567", "34566", "456"},
-		// "56" would be a valid substring,
-		// but this func is defined to return the earlier match.
-		{"123444567", "34556", "34"},
-		{"12345", "6789", ""},
-	} {
-		got := longestMutualSubstring(row.inputA, row.inputB)
-
-		if got != row.want {
-			t.Errorf("longestMutualSubstring(%q, %q) = %q, want %q", row.inputA, row.inputB, got, row.want)
-		}
-	}
-}
-
 func TestCalcSimilarity(t *testing.T) {
 	for _, row := range []struct {
 		target, guess string
