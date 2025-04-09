@@ -14,6 +14,9 @@ func TestCalcSimilarity(t *testing.T) {
 		{"Abc", "abC", 1},
 		{"abcd", "BC", 0.5},
 
+		// Unicode awareness: Treat as 1/2 code points, not 1/4 characters
+		{ "$€", "$E", 0.5},
+
 		{"abcd (ft. pants)", "abcd (ft. pants)", 1},
 		// (two errors vs. four characters in the proper title,
 		// no substring matching any more)

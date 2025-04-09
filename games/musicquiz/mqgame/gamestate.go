@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 	"unsafe"
 )
 
@@ -653,6 +654,7 @@ func (mg *multiguessGame) ResetTimer() {
 var ftParentheticalRegexp = regexp.MustCompile(` ?\((ft|feat|featuring)\.?[^)]+\)`)
 
 func calcSimilarity(target, guess string) (score float64) {
+
 	// Quick exit if it's a perfect guess
 	if strings.EqualFold(target, guess) {
 		return 1
@@ -672,11 +674,14 @@ func calcSimilarity(target, guess string) (score float64) {
 
 	// Otherwise, check similarity
 	dist := editDistance(target, guess)
-	diff := float64(dist) / float64(len(target))
+	diff := float64(dist) / float64(utf8.RuneCountInString(target))
 	return max(0.0, 1.0 - diff)
 }
 
-func editDistance(target string, guess string) (distance int) {
+func editDistance(targetStr string, guessStr string) (distance int) {
+	target := []rune(targetStr)
+	guess := []rune(guessStr)
+
 	// Quick exit: Empty strings are easy
 	if len(guess) == 0 {
 		return len(target)
@@ -718,5 +723,6 @@ func editDistance(target string, guess string) (distance int) {
 		}
 	}
 
+	fmt.Printf("'%v' vs '%v' -> %v\n", target, guess, editDistances)
 	return editDistances[len(target)][len(guess)]
 }
