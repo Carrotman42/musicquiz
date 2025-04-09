@@ -651,7 +651,7 @@ func (mg *multiguessGame) ResetTimer() {
 	mg.lastTimestamp = time.Now()
 }
 
-var parentheticalsRegexp = regexp.MustCompile(`( ?[[(].+[])])+`)
+var parentheticalsRegexp = regexp.MustCompile(`([[(].+[])])+`)
 
 func normalize(title string) (normalized string) {
 	return strings.ToLower(strings.TrimSpace(title))
