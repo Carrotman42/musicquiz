@@ -651,31 +651,43 @@ func (mg *multiguessGame) ResetTimer() {
 	mg.lastTimestamp = time.Now()
 }
 
-var ftParentheticalRegexp = regexp.MustCompile(` ?\((ft|feat|featuring)\.?[^)]+\)`)
+var parentheticalsRegexp = regexp.MustCompile(`([[(].+[])])+`)
+
+func normalize(title string) (normalized string) {
+	return strings.ToLower(strings.TrimSpace(title))
+}
 
 func calcSimilarity(target, guess string) (score float64) {
-
-	// Quick exit if it's a perfect guess
-	if strings.EqualFold(target, guess) {
-		return 1
-	}
+	originalTarget := target
+	originalGuess := guess
 
 	// Normalize both strings for a fair comparison
-	// (TODO: Give bonus points for matching the parenthetical later?)
-	target = ftParentheticalRegexp.ReplaceAllLiteralString(target, "")
-	guess = ftParentheticalRegexp.ReplaceAllLiteralString(guess, "")
-	target = strings.ToLower(strings.TrimSpace(target))
-	guess = strings.ToLower(strings.TrimSpace(guess))
-
-	// Quick-ish exit if it's a perfect guess after normalization
-	if strings.EqualFold(target, guess) {
-		return 1
-	}
+	target = normalize(parentheticalsRegexp.ReplaceAllLiteralString(target, ""))
+	guess = normalize(parentheticalsRegexp.ReplaceAllLiteralString(guess, ""))
 
 	// Otherwise, check similarity
 	dist := editDistance(target, guess)
 	diff := float64(dist) / float64(utf8.RuneCountInString(target))
-	return max(0.0, 1.0 - diff)
+	score = max(0.0, 1.0 - diff)
+
+	// Give back some bonus points if they matched the parentheticals
+	targetParen := normalize(parentheticalsRegexp.FindString(originalTarget))
+	if len(targetParen) > 0 {
+		guessParen := normalize(parentheticalsRegexp.FindString(originalGuess))
+		if targetParen == guessParen {
+			// Your bonus points are proportional to half the length of the parenthetical
+			// (e.g. perfectly guessing an equal-length title and parenthetical gives you
+			// a score of 1.5)
+			parenLen := utf8.RuneCountInString(targetParen) -
+				strings.Count(targetParen, "(") -
+				strings.Count(targetParen, ")") -
+				strings.Count(targetParen, "[") -
+				strings.Count(targetParen, "]")
+			score += float64(parenLen) / float64(len(target)) / 2.0
+		}
+	}
+
+	return score
 }
 
 func editDistance(targetStr string, guessStr string) (distance int) {
@@ -723,6 +735,5 @@ func editDistance(targetStr string, guessStr string) (distance int) {
 		}
 	}
 
-	fmt.Printf("'%v' vs '%v' -> %v\n", target, guess, editDistances)
 	return editDistances[len(target)][len(guess)]
 }
