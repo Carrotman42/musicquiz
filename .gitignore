@@ -2,3 +2,6 @@
 *.swp
 *.swo
 *~
+
+# Personal auth credentials (created by the python `ytmusicapi` code by default in the working directory)
+oauth.json
