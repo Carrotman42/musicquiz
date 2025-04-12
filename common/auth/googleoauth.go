@@ -24,6 +24,8 @@ var clientSecret string
 func GoogleOAuthDance(ctx context.Context, secrets SecretStore, scopes []string) (*http.Client, error) {
 	conf := &oauth2.Config{
 		ClientID:     "615383202793-khpjq1lt7aabgnq087cv5utu5qqchv1d.apps.googleusercontent.com",
+		// TODO DO NOT SUBMIT: Of course, this is a "TV / Limited device" client, so it can't do local loopback auth...
+		// ClientID:     "565861085943-d7pmf0407erflmbrh2v74ketf97a86co.apps.googleusercontent.com",
 		ClientSecret: clientSecret,
 		RedirectURL:  fmt.Sprintf("http://%v/auth/oauth_redirect", "localhost"), // *domain),
 		Scopes:       scopes,

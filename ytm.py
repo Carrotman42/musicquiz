@@ -30,7 +30,7 @@ flags.add_argument(
 
 def main(args, print_api_response=True):
     # Log HTTP requests?!
-    HTTPConnection.debuglevel = 1
+    HTTPConnection.debuglevel = 2
     logging.basicConfig()
     logging.getLogger().setLevel(logging.DEBUG)
     requests_log = logging.getLogger("requests.packages.urllib3")

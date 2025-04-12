@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 )
 
 var (
@@ -26,9 +28,22 @@ func main() {
 		log.Fatal("auth failure: ", err)
 	}
 
-	hc = http.DefaultClient
+	// Setup the initial magic SOCS=CAI cookie value
+	cookies, err := cookiejar.New(nil)
+	if err != nil {
+		log.Fatal("cookiejar failure: ", err)
+	}
+	ytmurl, err := url.Parse("https://music.youtube.com")
+	if err != nil {
+		log.Fatal("couldn't parse ytm URL?! ", err)
+	}
+	cookies.SetCookies(ytmurl, []*http.Cookie{{Name: "SOCS", Value: "CAI", Path: "/", Domain: "music.youtube.com"}})
+
+	hc = &http.Client{Jar: cookies}
 	ytm := ytmclient.New(hc)
 
+
 	//v=h_r1CR6Q8z0&si=fWwqWbiquAjI99iW
-	fmt.Println(ytm.GetSong(ctx, "h_r1CR6Q8z0"))
+	// fmt.Println(ytm.GetSong(ctx, "h_r1CR6Q8z0"))
+	fmt.Println(ytm.GetSong(ctx, "ZRJdVTXkdGI"))
 }
