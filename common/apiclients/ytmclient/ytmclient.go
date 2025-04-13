@@ -35,7 +35,33 @@ type Context struct {
 
 const auth = ""
 
-type GetSongResponse map[any]any
+type GetSongResponse struct {
+	// Streaming URL (hopefully -- there are more in:
+	//  - streamingData.formats[*].signatureCipher (s=...&sp=sig&url=...)
+	//  - streamingData.adaptiveFormats[*].signatureCipher (same)
+	StreamingData struct {
+		ServerAbrStreamingUrl string `json:"serverAbrStreamingUrl"`
+	} `json:"streamingData"`
+
+	// Title and artist (a.k.a. "author")
+	// TODO: get album from somewhere?
+	VideoDetails struct {
+		VideoId string `json:"videoId"`
+		Title string `json:"title"`
+		Author string `json:"author"`
+	} `json:"videoDetails"`
+
+	// Get the duration, just in case we want to skip to random points in the song,
+	// and attempt to extract the album title from the list of tags
+	Microformat struct {
+		MicroformatDataRenderer struct {
+			Tags []string `json:"tags"`
+			VideoDetails struct {
+				DurationSeconds string `json:"durationSeconds"`
+			} `json:"videoDetails"`
+		} `json:"microformatDataRenderer"`
+	} `json:"microformat"`
+}
 
 const apiBase = "https://music.youtube.com/youtubei/v1/"
 
@@ -202,6 +228,8 @@ func (c *Client) GetSong(ctx context.Context, id string) (GetSongResponse, error
 	req.PlaybackContext.ContentPlaybackContext.SignatureTimestamp = int(time.Since(time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC))/(24*time.Hour))
 	req.Context.Client.ClientName = "WEB_REMIX"
 	// e.g. '1.20250411.01.00'
+	//
+	// Also, excuse me, but WTF is this time format spec?!
 	req.Context.Client.ClientVersion = "1." + time.Now().Format("20060102") + ".01.00"
 
 	body, err := json.Marshal(req)
@@ -218,8 +246,9 @@ func (c *Client) GetSong(ctx context.Context, id string) (GetSongResponse, error
 	if err != nil {
 		return GetSongResponse{}, fmt.Errorf("read post result failed: %v", err)
 	}
+	// os.WriteFile("getsongresponse.json", bs, 0644)
 	var ret GetSongResponse
-	fmt.Printf("getsong raw response: %s", string(bs))
+	// fmt.Printf("getsong raw response: %s", string(bs))
 	if err := json.Unmarshal(bs, &ret); err != nil {
 		return GetSongResponse{}, fmt.Errorf("unmarshal: %v", err)
 	}
