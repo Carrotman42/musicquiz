@@ -1,0 +1,93 @@
+<html>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<iframe src="/scoreboard"></iframe>
+
+<div id="player"></div>
+
+<!-- TODO: Invisible YTM embed page, and websocket/polling controller for it? -->
+
+<!-- TODO: Websockets, not long polling... -->
+<script>
+  const socket = new WebSocket("ws://" + window.location.host + "/host/comms");
+  socket.addEventListener("open", (event) => {
+    console.log("Socket opened successfully!");
+  })
+  socket.addEventListener("message", (event) => {
+    console.log('Next YTM player action:');
+    console.log(event);
+    if (event.data == "WAIT") {
+      // There's another host window open, let them have it and don't play ours
+      player.pauseVideo();
+      so
+    } else if (event.data == "play") {
+      player.playVideo();
+    } else if (event.data == "pause") {
+      player.pauseVideo();
+    } else if (event.data.startsWith("next")) {
+      player.loadVideoById(event.data.substr("next:".length));
+    } else if (event.data == "seek") {
+      player.seekTo(player.getCurrentTime() + success.secs);
+    } else {
+      console.log('Unrecognized action: "' + event.data + '"');
+      socket.send("ERR:UNRECOGNIZED_ACTION:" + event.data);
+      return;
+    }
+    socket.send("OK")
+  });
+
+
+  // xhrDo("POST", "/host/wait/nextYtmAction", {"next_state": "TODO"}).then(
+  //   (success) => {
+  //     console.log('Next YTM player action:');
+  //     console.log(success);
+  //     if (event.data == "play") {
+  //       player.playVideo();
+  //     } else if (event.data == "pause") {
+  //       player.pauseVideo();
+  //     } else if (event.data == "next") {
+  //       player.loadVideoById(success.songId);
+  //     } else if (event.data == "seek") {
+  //       player.seekTo(player.getCurrentTime() + success.secs);
+  //     } else {
+  //       console.log('Unrecognized action: "' + event.data + '"');
+  //     }
+  //   },
+  //   (failure) => { },
+  // );
+
+  // This automatically runs when the API has finished loading
+  var player;
+  function onYouTubeIframeAPIReady() {
+    player = new YT.Player('player', {
+      height: '1',
+      width: '1',
+      // Start with white noise because why not
+      videoId: '626fjdtaJWs',
+      playerVars: {'playsinline': 1, 'autoplay': 1, 'controls': 0},
+      events: {
+        'onReady': (e) => {e.target.playVideo();},
+        'onStateChange': (e) => {
+          console.log('State change:');
+          console.log(e);
+        },
+        // Errors:
+        // - 101 or 150: Not allowed in embedded players
+        // - 2: Invalid video ID (or other parameter)
+        // - 5: HTML5 error
+        // - 100: Video not found (removed or marked as private)
+        'onError': (e) => {
+          if (e.data == 150 || e.data == 100) {
+            // TODO DO NOT SUBMIT: Screw you YTM! Setting this for basically every single song.
+            console.log('Video not allowed in embedded players: ' + e.target.playerInfo.videoUrl);
+          }
+          console.log('Unknown error loading YT player:');
+          console.log(e);
+        }
+      }
+    });
+  }
+</script>
+<script src="https://www.youtube.com/iframe_api"></script>
+
+</html>

@@ -1,7 +1,7 @@
 package mqgame
 
 import (
-	"chowski3/common/automation/ytmgui"
+	"chowski3/games/musicquiz/mqgame/data"
 	"cmp"
 	"fmt"
 	"maps"
@@ -14,15 +14,78 @@ import (
 	"unsafe"
 )
 
-type GuessRound struct {
-	Song    SongInfo
-	Guesses []SongGuess
-	Passes  []*Player
+// Safe to copy by value.
+type PlayerVote struct {
+	Player *data.Player
+	Voted  bool
+	Vote   bool
+}
+type PlayerRoundState struct {
+	Guesses  []SongGuess
+	Correct  bool
+	Passed   bool
+	BestTime time.Duration // only set if Correct
 }
 
-type normmap map[string]*Player
+type Scoreboard struct {
+	Ranking []Scorerank
+	Rounds  []ScoredRound
+}
 
-func (nm normmap) normalize(p *Player) *Player {
+type Scorerank struct {
+	Player *data.Player
+	Total  float64
+}
+
+// ScoredGuess is the result of a scored round for a single player's guess,
+// recording the score relative to other player's guesses.
+type PlayerScore struct {
+	Player *data.Player
+	// [0, 1], see ScoreRound for details.
+	Score float64
+
+	Delay time.Duration
+}
+
+type ScoredRound struct {
+	Round  GuessRound
+	Scores []PlayerScore
+}
+
+type SongGuess struct {
+	Player *data.Player
+	Delay  time.Duration
+	Guess  string
+
+	Votes []PlayerVote
+}
+
+type GuessRound struct {
+	Song    data.SongInfo
+	Guesses []SongGuess
+	Passes  []*data.Player
+}
+
+type normmap map[string]*data.Player
+
+func (gr *GuessRound) NormalizePlayers(players normmap) {
+	for i, p := range gr.Passes {
+		gr.Passes[i] = players.normalize(p)
+	}
+	for i := range gr.Guesses {
+		gr.Guesses[i].NormalizePlayers(players)
+	}
+}
+
+
+func (sg *SongGuess) NormalizePlayers(players normmap) {
+	sg.Player = players.normalize(sg.Player)
+	for i := range sg.Votes {
+		sg.Votes[i].Player = players.normalize(sg.Votes[i].Player)
+	}
+}
+
+func (nm normmap) normalize(p *data.Player) *data.Player {
 	if existing, ok := nm[p.Name]; ok {
 		return existing
 	}
@@ -30,41 +93,8 @@ func (nm normmap) normalize(p *Player) *Player {
 	return p
 }
 
-func (gr *GuessRound) normalizePlayers(players normmap) {
-	for i, p := range gr.Passes {
-		gr.Passes[i] = players.normalize(p)
-	}
-	for i := range gr.Guesses {
-		gr.Guesses[i].normalizePlayers(players)
-	}
-}
 
-// TODO: not a great dependency, I think.
-type SongInfo = ytmgui.SongInfo
-
-type SongGuess struct {
-	Player *Player
-	Delay  time.Duration
-	Guess  string
-
-	Votes []PlayerVote
-}
-
-func (sg *SongGuess) normalizePlayers(players normmap) {
-	sg.Player = players.normalize(sg.Player)
-	for i := range sg.Votes {
-		sg.Votes[i].Player = players.normalize(sg.Votes[i].Player)
-	}
-}
-
-// Safe to copy by value.
-type PlayerVote struct {
-	Player *Player
-	Voted  bool
-	Vote   bool
-}
-
-func (sg SongGuess) Correct(curSong SongInfo) (similarity float64, closeEnough bool) {
+func (sg SongGuess) Correct(curSong data.SongInfo) (similarity float64, closeEnough bool) {
 	d := sg.Description(curSong)
 	return d.Score, d.Correct()
 }
@@ -87,6 +117,7 @@ type SongGuessDescription struct {
 	CorrectedByContest bool
 }
 
+
 func (sgd SongGuessDescription) ScorePercent() int {
 	return int(sgd.Score * 100)
 }
@@ -97,7 +128,7 @@ func (sgd SongGuessDescription) Correct() bool {
 	return sgd.CorrectedByContest || sgd.Score >= minCorrectSongScore
 }
 
-func (sg SongGuess) Description(correct SongInfo) SongGuessDescription {
+func (sg SongGuess) Description(correct data.SongInfo) SongGuessDescription {
 	correctByContest := false
 	if len(sg.Votes) > 0 {
 		yes, unvoted := 0, 0
@@ -121,7 +152,7 @@ func (sg SongGuess) Description(correct SongInfo) SongGuessDescription {
 
 // Semantically modifies the receiver, even though technically we don't need
 // it to be a pointer.
-func (sg *SongGuess) ContestVote(other *Player, valid bool) error {
+func (sg *SongGuess) ContestVote(other *data.Player, valid bool) error {
 	if sg.Player == other {
 		return fmt.Errorf("ContestVote: invalid API use: cannot call ContestVote on own SongGuess, please call via PlayerContest")
 	}
@@ -163,8 +194,8 @@ func (sg SongGuess) IsContested() bool {
 	return len(sg.Votes) > 0
 }
 
-func (sg SongGuess) NeedContestVotesFrom() []*Player {
-	var ret []*Player
+func (sg SongGuess) NeedContestVotesFrom() []*data.Player {
+	var ret []*data.Player
 	for _, v := range sg.Votes {
 		if !v.Voted {
 			ret = append(ret, v.Player)
@@ -173,7 +204,7 @@ func (sg SongGuess) NeedContestVotesFrom() []*Player {
 	return ret
 }
 
-func (sg SongGuess) FindContestedVote(other *Player) (PlayerVote, error) {
+func (sg SongGuess) FindContestedVote(other *data.Player) (PlayerVote, error) {
 	if !sg.IsContested() {
 		return PlayerVote{}, fmt.Errorf("%s's guess of %q is not contested, tell them to contest it", sg.Player.Name, sg.Guess)
 	}
@@ -187,7 +218,7 @@ func (sg SongGuess) FindContestedVote(other *Player) (PlayerVote, error) {
 	//return PlayerVote{}, fmt.Errorf("can't find contested vote: player %q not found; did you just join?", sg.Player.Name, sg.Guess, other.Name)
 }
 
-func (sg SongGuess) NeedsContestVote(other *Player) bool {
+func (sg SongGuess) NeedsContestVote(other *data.Player) bool {
 	pv, err := sg.FindContestedVote(other)
 	if err != nil {
 		// error doesn't matter: it's mostly signaling to the
@@ -197,26 +228,19 @@ func (sg SongGuess) NeedsContestVote(other *Player) bool {
 	return !pv.Voted
 }
 
-type PlayerRoundState struct {
-	Guesses  []SongGuess
-	Correct  bool
-	Passed   bool
-	BestTime time.Duration // only set if Correct
-}
-
 func (prs PlayerRoundState) StillGuessing() bool {
 	return !prs.Correct && !prs.Passed
 }
 
 // Helps protect the IsZero implementation
 func init() {
-	if unsafe.Sizeof(GuessRound{}) != 12*unsafe.Sizeof((*int)(nil)) {
-		panic("BAD size for GuessRound!")
+	if unsafe.Sizeof(GuessRound{}) != 14*unsafe.Sizeof((*int)(nil)) {
+		panic(fmt.Sprintf("BAD size for GuessRound! %d vs %d", unsafe.Sizeof(GuessRound{}), 14*unsafe.Sizeof((*int)(nil))))
 	}
 }
 
 func (gr GuessRound) IsZero() bool {
-	return gr.Song == SongInfo{} && gr.Guesses == nil && gr.Passes == nil
+	return gr.Song == data.SongInfo{} && gr.Guesses == nil && gr.Passes == nil
 }
 
 func (gr GuessRound) Clone() GuessRound {
@@ -232,11 +256,11 @@ func (gr GuessRound) Clone() GuessRound {
 }
 
 func (gr GuessRound) OutstandingContests() []string {
-	var counts map[*Player]int
+	var counts map[*data.Player]int
 	for _, g := range gr.Guesses {
 		for _, p := range g.NeedContestVotesFrom() {
 			if counts == nil {
-				counts = make(map[*Player]int)
+				counts = make(map[*data.Player]int)
 			}
 			counts[p]++
 		}
@@ -245,7 +269,7 @@ func (gr GuessRound) OutstandingContests() []string {
 		return nil
 	}
 	ret := make([]string, 0, len(counts))
-	for _, p := range slices.SortedFunc(maps.Keys(counts), func(a, b *Player) int {
+	for _, p := range slices.SortedFunc(maps.Keys(counts), func(a, b *data.Player) int {
 		return cmp.Compare(a.Name, b.Name)
 	}) {
 		ret = append(ret, fmt.Sprintf("%v (%d missing votes)", p.Name, counts[p]))
@@ -253,7 +277,7 @@ func (gr GuessRound) OutstandingContests() []string {
 	return ret
 }
 
-func (gr GuessRound) PlayerGuesses(p *Player) []SongGuess {
+func (gr GuessRound) PlayerGuesses(p *data.Player) []SongGuess {
 	if gr.IsZero() {
 		panic("GuessRound is zero value - no round found!")
 	}
@@ -266,7 +290,7 @@ func (gr GuessRound) PlayerGuesses(p *Player) []SongGuess {
 	return ret
 }
 
-func (gr GuessRound) PlayerState(p *Player) PlayerRoundState {
+func (gr GuessRound) PlayerState(p *data.Player) PlayerRoundState {
 	if gr.IsZero() {
 		panic("GuessRound is zero value - no round found!")
 	}
@@ -294,7 +318,7 @@ func (gr GuessRound) PlayerState(p *Player) PlayerRoundState {
 	}
 }
 
-func (gr GuessRound) AllPlayers() []*Player {
+func (gr GuessRound) AllPlayers() []*data.Player {
 	ret := slices.Clone(gr.Passes)
 	for _, g := range gr.Guesses {
 		// number of players will be small, and testing equality is
@@ -307,7 +331,7 @@ func (gr GuessRound) AllPlayers() []*Player {
 	return ret
 }
 
-func (gr GuessRound) FinishedPlayers() []*Player {
+func (gr GuessRound) FinishedPlayers() []*data.Player {
 	ret := slices.Clone(gr.Passes)
 	for _, g := range gr.Guesses {
 		// number of players will be small, so a set is wasteful.
@@ -321,7 +345,7 @@ func (gr GuessRound) FinishedPlayers() []*Player {
 	return ret
 }
 
-func (gr GuessRound) PlayerSummary(p *Player) []string {
+func (gr GuessRound) PlayerSummary(p *data.Player) []string {
 	guesses := gr.PlayerGuesses(p)
 	ret := make([]string, len(guesses), len(guesses)+1)
 	for i, g := range guesses {
@@ -342,7 +366,7 @@ func (gr GuessRound) PlayerSummary(p *Player) []string {
 // Passing in allPlayers is a bit weird, but prevents needing to pass them
 // around later.  plus, someone shouldn't get to just create a bunch of new
 // players just to vote, after the fact at least.
-func (gr *GuessRound) PlayerContest(p *Player, title string, allPlayers []*Player) error {
+func (gr *GuessRound) PlayerContest(p *data.Player, title string, allPlayers []*data.Player) error {
 	guesses := gr.Guesses
 	var guess *SongGuess
 	for i := range guesses {
@@ -372,7 +396,7 @@ func (gr *GuessRound) PlayerContest(p *Player, title string, allPlayers []*Playe
 }
 
 // Acts on *GuessRound since this operation semantically mutates the round.
-func (gr *GuessRound) PlayerContestVote(other *Player, guessPlayerName, title string, shouldCount bool) error {
+func (gr *GuessRound) PlayerContestVote(other *data.Player, guessPlayerName, title string, shouldCount bool) error {
 	guesses := gr.Guesses
 	var guess *SongGuess
 	for i := range guesses {
@@ -391,33 +415,13 @@ func (gr *GuessRound) PlayerContestVote(other *Player, guessPlayerName, title st
 	return guess.ContestVote(other, shouldCount)
 }
 
-type Scoreboard struct {
-	Ranking []Scorerank
-	Rounds  []ScoredRound
-}
-
-func (sc Scoreboard) PlayerTotal(p *Player) float64 {
+func (sc Scoreboard) PlayerTotal(p *data.Player) float64 {
 	for _, r := range sc.Ranking {
 		if r.Player == p {
 			return r.Total
 		}
 	}
 	return 0 //math.NaN()
-}
-
-type Scorerank struct {
-	Player *Player
-	Total  float64
-}
-
-// ScoredGuess is the result of a scored round for a single player's guess,
-// recording the score relative to other player's guesses.
-type PlayerScore struct {
-	Player *Player
-	// [0, 1], see ScoreRound for details.
-	Score float64
-
-	Delay time.Duration
 }
 
 // Used in the rendered html template; easier than calling Truncate in the
@@ -427,13 +431,8 @@ func (ps PlayerScore) DelayString() string {
 	return ps.Delay.Truncate(100 * time.Millisecond).String()
 }
 
-type ScoredRound struct {
-	Round  GuessRound
-	Scores []PlayerScore
-}
-
-func (sr ScoredRound) ScoresByPlayer() map[*Player]PlayerScore {
-	ret := make(map[*Player]PlayerScore, len(sr.Scores))
+func (sr ScoredRound) ScoresByPlayer() map[*data.Player]PlayerScore {
+	ret := make(map[*data.Player]PlayerScore, len(sr.Scores))
 	for _, score := range sr.Scores {
 		ret[score.Player] = score
 	}
@@ -450,7 +449,7 @@ func ScoreRound(round GuessRound) ScoredRound {
 	var scores []PlayerScore
 
 	type pprs struct {
-		p   *Player
+		p   *data.Player
 		prs PlayerRoundState
 	}
 	var pprss []pprs
@@ -497,7 +496,7 @@ func ScoreRound(round GuessRound) ScoredRound {
 }
 
 func ScoreRounds(rounds []GuessRound) Scoreboard {
-	m := make(map[*Player][]float64)
+	m := make(map[*data.Player][]float64)
 	scoredRounds := make([]ScoredRound, len(rounds))
 	for i, round := range rounds {
 		scored := ScoreRound(round)
@@ -526,7 +525,7 @@ func ScoreRounds(rounds []GuessRound) Scoreboard {
 type multiguessGame struct {
 	mu            sync.Mutex
 	rounds        []GuessRound
-	curSong       SongInfo
+	curSong       data.SongInfo
 	lastTimestamp time.Time
 }
 
@@ -560,7 +559,7 @@ func (mg *multiguessGame) CurrentRound() GuessRound {
 	mg.mu.Lock()
 	defer mg.mu.Unlock()
 
-	if len(mg.rounds) == 0 || mg.curSong == (SongInfo{}) {
+	if len(mg.rounds) == 0 || mg.curSong == (data.SongInfo{}) {
 		return GuessRound{}
 	}
 	return mg.rounds[len(mg.rounds)-1]
@@ -571,7 +570,7 @@ func (mg *multiguessGame) PriorRound() GuessRound {
 	defer mg.mu.Unlock()
 
 	idx := len(mg.rounds) - 1
-	if mg.curSong != (SongInfo{}) {
+	if mg.curSong != (data.SongInfo{}) {
 		idx--
 	}
 	if idx < 0 {
@@ -580,11 +579,11 @@ func (mg *multiguessGame) PriorRound() GuessRound {
 	return mg.rounds[idx]
 }
 
-func (mg *multiguessGame) PlayerGuess(p *Player, title string) (gotIt bool, _ error) {
+func (mg *multiguessGame) PlayerGuess(p *data.Player, title string) (gotIt bool, _ error) {
 	mg.mu.Lock()
 	defer mg.mu.Unlock()
 
-	if len(mg.rounds) == 0 || mg.curSong == (SongInfo{}) {
+	if len(mg.rounds) == 0 || mg.curSong == (data.SongInfo{}) {
 		return false, fmt.Errorf("can't guess: no round found")
 	}
 	round := &mg.rounds[len(mg.rounds)-1]
@@ -597,11 +596,11 @@ func (mg *multiguessGame) PlayerGuess(p *Player, title string) (gotIt bool, _ er
 	return gotIt, nil
 }
 
-func (mg *multiguessGame) PlayerPass(p *Player) error {
+func (mg *multiguessGame) PlayerPass(p *data.Player) error {
 	mg.mu.Lock()
 	defer mg.mu.Unlock()
 
-	if len(mg.rounds) == 0 || mg.curSong == (SongInfo{}) {
+	if len(mg.rounds) == 0 || mg.curSong == (data.SongInfo{}) {
 		return fmt.Errorf("can't pass: no round found")
 	}
 	round := &mg.rounds[len(mg.rounds)-1]
@@ -612,7 +611,7 @@ func (mg *multiguessGame) PlayerPass(p *Player) error {
 	return nil
 }
 
-func (mg *multiguessGame) PlayerContest(p *Player, title string, allPlayers []*Player) error {
+func (mg *multiguessGame) PlayerContest(p *data.Player, title string, allPlayers []*data.Player) error {
 	mg.mu.Lock()
 	defer mg.mu.Unlock()
 
@@ -622,7 +621,7 @@ func (mg *multiguessGame) PlayerContest(p *Player, title string, allPlayers []*P
 	return mg.rounds[len(mg.rounds)-1].PlayerContest(p, title, allPlayers)
 }
 
-func (mg *multiguessGame) PlayerContestVote(other *Player, guessPlayerName, title string, shouldCount bool) error {
+func (mg *multiguessGame) PlayerContestVote(other *data.Player, guessPlayerName, title string, shouldCount bool) error {
 	mg.mu.Lock()
 	defer mg.mu.Unlock()
 
@@ -632,14 +631,14 @@ func (mg *multiguessGame) PlayerContestVote(other *Player, guessPlayerName, titl
 	return mg.rounds[len(mg.rounds)-1].PlayerContestVote(other, guessPlayerName, title, shouldCount)
 }
 
-// Pass an empty SongInfo if you want to stop the round but not start a new one.
-func (mg *multiguessGame) SetCurrentSong(info SongInfo) {
+// Pass an empty data.SongInfo if you want to stop the round but not start a new one.
+func (mg *multiguessGame) SetCurrentSong(info data.SongInfo) {
 	mg.mu.Lock()
 	defer mg.mu.Unlock()
 
 	mg.curSong = info
 	mg.lastTimestamp = time.Now()
-	if info != (SongInfo{}) {
+	if info != (data.SongInfo{}) {
 		mg.rounds = append(mg.rounds, GuessRound{Song: info})
 	}
 }

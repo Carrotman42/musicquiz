@@ -5,6 +5,7 @@ package ytmgui
 
 import (
 	"chowski3/common/oslevelinput"
+	"chowski3/games/musicquiz/mqgame/data"
 	"context"
 	"errors"
 	"fmt"
@@ -28,12 +29,18 @@ func (p *Player) keypress(code oslevelinput.EventCode) {
 	p.wr.Keypress(code)
 }
 
-func (p *Player) Play() {
+func (p *Player) Play() error {
 	p.keypress(oslevelinput.KEY_SPACE)
+	return nil; // TODO: Can't detect errors, but I don't care
 }
 
-func (p *Player) Pause() {
+func (p *Player) Pause() error {
 	p.keypress(oslevelinput.KEY_SPACE)
+	return nil; // TODO: Can't detect errors, but I don't care
+}
+
+func (p *Player) ChangeSong(song data.SongInfo) error {
+	return fmt.Errorf("Cannot call this ChangeSong method on a keyboard/mouse-based player")
 }
 
 // Doesn't pause first.
@@ -68,53 +75,29 @@ func (p *Player) Seek(deltaSeconds int) {
 	}
 }
 
-func (p *Player) NextSong(ctx context.Context) (SongInfo, error) {
+func (p *Player) NextSong(ctx context.Context) (data.SongInfo, error) {
 	lastSong, err := p.SongInfo()
 	if err != nil && !errors.Is(err, ErrNoSongInTitle) {
-		return SongInfo{}, fmt.Errorf("NextSong: looking for prior song: %w", err)
+		return data.SongInfo{}, fmt.Errorf("NextSong: looking for prior song: %w", err)
 	}
 	p.keypress(oslevelinput.KEY_J)
 	if song, err := p.waitForSongToNotBe(ctx, lastSong); err != nil {
-		return SongInfo{}, fmt.Errorf("NextSong: %w", err)
+		return data.SongInfo{}, fmt.Errorf("NextSong: %w", err)
 	} else {
 		return song, nil
 	}
 }
 
-// Call [Clone] to copy.
-type SongInfo struct {
-	Title  string
-	Artist string
-	Album  string
-}
-
-func (si SongInfo) String() string {
-	if si.Artist == "" && si.Album == "" {
-		// Sadly this is what we have all the time right now.
-		return si.Title
-	}
-	if si.Artist == "" {
-		return fmt.Sprintf("%s by %s", si.Title, si.Artist)
-	}
-	return fmt.Sprintf("%s by %s on %s", si.Title, si.Artist, si.Album)
-}
-
-func (si SongInfo) Clone() SongInfo {
-	// Right now a shallow copy is sufficient, but I don't want to promise
-	// that API forever - seems like we might have more structure later.
-	return si
-}
-
 var ErrNoSongInTitle = errors.New("there were no firefox windows with YouTube Music playing anything")
 
-// Returns zero value's SongInfo on error.
-func (p *Player) SongInfo() (ret SongInfo, retErr error) {
+// Returns zero value's data.SongInfo on error.
+func (p *Player) SongInfo() (ret data.SongInfo, retErr error) {
 	//defer func() {
-	//	fmt.Printf("SongInfo -> (%v, %v)\n", ret, retErr)
+	//	fmt.Printf("data.SongInfo -> (%v, %v)\n", ret, retErr)
 	//}()
 	out, err := exec.Command("xdotool", "search", "--name", "--classname", "--class", "firefox").CombinedOutput()
 	if err != nil {
-		return SongInfo{}, fmt.Errorf("SongInfo: xdotool search: %v; output:\n%s", err, out)
+		return data.SongInfo{}, fmt.Errorf("data.SongInfo: xdotool search: %v; output:\n%s", err, out)
 	}
 	lines := strings.Split(string(out), "\n")
 	//log.Printf("%d firefox windows: %q", len(lines), lines)
@@ -131,19 +114,19 @@ func (p *Player) SongInfo() (ret SongInfo, retErr error) {
 				continue
 			}
 
-			return SongInfo{}, fmt.Errorf("%q: %v; output=%q", cmd, err, title)
+			return data.SongInfo{}, fmt.Errorf("%q: %v; output=%q", cmd, err, title)
 		}
 		if name, ok := strings.CutSuffix(string(title), " - YouTube Music — Mozilla Firefox\n"); ok {
 			if name == "" {
 				// debugging... seems unlikely but who knows
-				return SongInfo{}, fmt.Errorf("weird: empty song title: %q", string(title))
+				return data.SongInfo{}, fmt.Errorf("weird: empty song title: %q", string(title))
 			}
 			// TODO: check other lines for accidental duplicates?
-			return SongInfo{Title: name}, nil
+			return data.SongInfo{Title: name}, nil
 		}
 		//log.Printf("Ignore non-song title: %q", title)
 	}
-	return SongInfo{}, ErrNoSongInTitle
+	return data.SongInfo{}, ErrNoSongInTitle
 }
 
 // wait may be valid even if there is an error.
@@ -207,7 +190,7 @@ func (p *Player) InitialSetup(ctx context.Context, mouse *oslevelinput.MouseWrit
 	log.Printf("CLICK WORKAROUND")
 	p.UseMouseToHitPlay(mouse)
 
-	if _, err := p.waitForSongToNotBe(ctx, SongInfo{}); err != nil {
+	if _, err := p.waitForSongToNotBe(ctx, data.SongInfo{}); err != nil {
 		return fmt.Errorf("InitialSetup while waiting for first song title to show up: %w", err)
 	}
 
@@ -221,7 +204,7 @@ func (p *Player) InitialSetup(ctx context.Context, mouse *oslevelinput.MouseWrit
 	return nil
 }
 
-func (p *Player) waitForSongToNotBe(ctx context.Context, not SongInfo) (ret SongInfo, retErr error) {
+func (p *Player) waitForSongToNotBe(ctx context.Context, not data.SongInfo) (ret data.SongInfo, retErr error) {
 	//fmt.Printf("waitForSongToNotBe(%v)...\n", not)
 	//defer func() {
 	//	fmt.Printf("waitForSongToNotBe(%v) -> (%v, %v)\n", not, ret,retErr)
@@ -229,7 +212,7 @@ func (p *Player) waitForSongToNotBe(ctx context.Context, not SongInfo) (ret Song
 	for ticker := time.Tick(100 * time.Millisecond); ; {
 		select {
 		case <-ctx.Done():
-			return SongInfo{}, fmt.Errorf("waitForSongToNotBe: %w", ctx.Err())
+			return data.SongInfo{}, fmt.Errorf("waitForSongToNotBe: %w", ctx.Err())
 		case <-ticker:
 		}
 		if info, err := p.SongInfo(); err == nil && info != not {
@@ -237,8 +220,7 @@ func (p *Player) waitForSongToNotBe(ctx context.Context, not SongInfo) (ret Song
 		} else if err == nil || errors.Is(err, ErrNoSongInTitle) {
 			continue
 		} else {
-			return SongInfo{}, fmt.Errorf("waitForSongToNotBe: %w", err)
+			return data.SongInfo{}, fmt.Errorf("waitForSongToNotBe: %w", err)
 		}
 	}
-	panic("unreachable")
 }

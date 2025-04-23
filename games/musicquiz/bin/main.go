@@ -9,63 +9,76 @@ package main
 
 import (
 	"chowski3/common/automation/ytmgui"
-	"chowski3/common/oslevelinput"
+	"net"
+	"strings"
+
+	// "chowski3/common/oslevelinput"
 	"chowski3/games/musicquiz/mqgame"
 	"chowski3/games/musicquiz/mqhttpui"
-	"context"
+
+	// "context"
 	"errors"
 	"flag"
 	"log"
-	"maps"
+
+	// "maps"
 	"os"
-	"slices"
+	// "slices"
 	"time"
 )
 
 var (
-	playlistURL   = flag.String("playlist-url", "https://music.youtube.com/playlist?list=PLN7UIWiGb1K5h8_iuyoKhmD-N9z0Jo3lG", "full URL for playlist to play")
-	skipInit      = flag.Bool("skip-init", false, "Assume that YouTube Music is in the foreground and ready to go; causes other various flags to be ignored")
+	playlistURL = flag.String("playlist-url", "https://music.youtube.com/playlist?list=PLN7UIWiGb1K5h8_iuyoKhmD-N9z0Jo3lG", "full URL for playlist to play")
+	// skipInit      = flag.Bool("skip-init", false, "Assume that YouTube Music is in the foreground and ready to go; causes other various flags to be ignored")
 	persistFile   = flag.String("persist-file", "", "Restore from this file (if it exists), as well as store state to this file regularly")
 	persistPeriod = flag.Duration("persist-period", 30*time.Second, "Period between persisting state to --persist-file")
+	browserCommand = flag.String("browser-command", "google-chrome-stable --new-window", "Command to open a new URL in the browser (e.g. `firefox` or `xdg-open`)")
 )
 
 func main() {
 	flag.Parse()
-	ctx := context.Background()
 
-	wrs, err := oslevelinput.OpenAllWrite()
-	if err != nil {
-		log.Fatal(err)
-	}
-	var keyboard oslevelinput.Writer
-	if len(wrs) == 1 {
-		for _, keyboard = range wrs {
-		}
-	} else {
-		if len(flag.Args()) != 1 {
-			log.Fatalf("WHICH TO PICK? %q", slices.Sorted(maps.Keys(wrs)))
-		}
-		var ok bool
-		if keyboard, ok = wrs[flag.Args()[0]]; !ok {
-			log.Fatalf("%q not found; options: %v", flag.Args()[0], slices.Sorted(maps.Keys(wrs)))
-		}
-	}
-	mouse, err := oslevelinput.OpenMouseWriter("/dev/input/event0")
-	if err != nil {
-		log.Fatal("opening mouse: ", err)
-	}
+	/////////////////////////////// OLD YTM SETUP
+	// ctx := context.Background()
+	// wrs, err := oslevelinput.OpenAllWrite()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// var keyboard oslevelinput.Writer
+	// if len(wrs) == 1 {
+	// 	for _, keyboard = range wrs {
+	// 	}
+	// } else {
+	// 	if len(flag.Args()) != 1 {
+	// 		log.Fatalf("WHICH TO PICK? %q", slices.Sorted(maps.Keys(wrs)))
+	// 	}
+	// 	var ok bool
+	// 	if keyboard, ok = wrs[flag.Args()[0]]; !ok {
+	// 		log.Fatalf("%q not found; options: %v", flag.Args()[0], slices.Sorted(maps.Keys(wrs)))
+	// 	}
+	// }
+	// mouse, err := oslevelinput.OpenMouseWriter("/dev/input/event0")
+	// if err != nil {
+	// 	log.Fatal("opening mouse: ", err)
+	// }
 
-	ytm := ytmgui.New(keyboard)
+	// // TODO DO NOT SUBMIT: Replace this with a web gui of some sort?
+	// ytm := ytmgui.New(keyboard)
 
-	if *skipInit {
-		log.Printf("Skipping initialization; please have ytm open in its own window, in the foreground, with the playlist ready to go; don't forget shuffle!")
-	} else {
-		setupCtx, cf := context.WithTimeout(ctx, 2*time.Minute)
-		defer cf()
-		if err := ytm.InitialSetup(setupCtx, mouse, *playlistURL); err != nil {
-			log.Fatal(err)
-		}
-	}
+	// if *skipInit {
+	// 	log.Printf("Skipping initialization; please have ytm open in its own window, in the foreground, with the playlist ready to go; don't forget shuffle!")
+	// } else {
+	// 	setupCtx, cf := context.WithTimeout(ctx, 2*time.Minute)
+	// 	defer cf()
+	// 	if err := ytm.InitialSetup(setupCtx, mouse, *playlistURL); err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	// }
+	///////////////////////////////
+
+	/////////////////////////////// NEW YTM SETUP
+	ytm := ytmgui.NewEmbedPlayer()
+	///////////////////////////////
 
 	var state *mqgame.State
 	if *persistFile == "" {
@@ -98,5 +111,20 @@ func main() {
 	}()
 
 ready:
-	mqhttpui.Run(mqhttpui.MultiguessGame{}, state, "192.168.86.33:1123", "192.168.86.33")
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		log.Fatalf("can't get IP addr: %v\n", err)
+	}
+	localIp := ""
+	for _, addr := range addrs {
+		log.Printf("addr: %v\n", addr)
+		if strings.HasPrefix(addr.String(), "192") {
+			localIp, _, _ = strings.Cut(addr.String(), "/")
+			break
+		}
+	}
+	if localIp == "" {
+		log.Fatalf("couldn't get local IP address")
+	}
+	mqhttpui.Run(mqhttpui.MultiguessGame{}, state, ytm, localIp + ":1123", localIp, browserCommand)
 }

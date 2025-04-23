@@ -2,18 +2,24 @@ package mqhttpui
 
 import (
 	"chowski3/games/musicquiz/mqgame"
+	"chowski3/games/musicquiz/mqgame/data"
 	"fmt"
 	"html/template"
 	"io"
 	"math/rand/v2"
 	"net/http"
+	"strings"
 )
 
 type MultiguessGame struct {
 }
 
-func (mg MultiguessGame) RenderPage(wr io.Writer, s *mqgame.State, p *mqgame.Player, req *http.Request) error {
-	if req.URL.Query().Has("scoreboard") {
+func (mg MultiguessGame) RenderScoreboard(wr io.Writer, s *mqgame.State, p *data.Player, req *http.Request) error {
+	return scoreboardTemplate.Execute(wr, scoreboardData{p, s})
+}
+
+func (mg MultiguessGame) RenderPage(wr io.Writer, s *mqgame.State, p *data.Player, req *http.Request) error {
+	if strings.Contains(req.URL.String(), "scoreboard") {
 		return scoreboardTemplate.Execute(wr, scoreboardData{p, s})
 	}
 	cloned, err := gameTemplate.Clone()
@@ -25,13 +31,13 @@ func (mg MultiguessGame) RenderPage(wr io.Writer, s *mqgame.State, p *mqgame.Pla
 	// TODO: is this clone "inefficient"? Probably don't care too much but
 	// it's worth a benchmark for future reference.
 	cloned = cloned.Funcs(template.FuncMap{
-		"currentPlayer": func() *mqgame.Player { return p },
+		"currentPlayer": func() *data.Player { return p },
 	})
 	return cloned.Execute(wr, gameData{p, s})
 }
 
 var builtinTemplateFuncs = template.FuncMap{
-	"currentPlayer": func() *mqgame.Player {
+	"currentPlayer": func() *data.Player {
 		panic("shouldn't be called - should be overridden before executing")
 	},
 	"plus1": func(x int) int { return x + 1 },
@@ -56,7 +62,7 @@ var confettiChars = []string{
 }
 
 type gameData struct {
-	Player *mqgame.Player
+	Player *data.Player
 
 	State *mqgame.State
 }
@@ -260,11 +266,11 @@ function xhrCheckNextRound() {
 </html>`))
 
 type scoreboardData struct {
-	Player *mqgame.Player
+	Player *data.Player
 	*mqgame.State
 }
 
-var scoreboardTemplate = template.Must(template.New("scoreboardTemplate").Parse(`<html>
+var scoreboardTemplate = template.Must(template.New("scoreboardTemplate").Funcs(builtinTemplateFuncs).Parse(`<html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 {{ $scoreboard := .Scoreboard }}
@@ -309,6 +315,31 @@ var scoreboardTemplate = template.Must(template.New("scoreboardTemplate").Parse(
 		{{ end }}
 	</tr>
 </table>
+
+<script>
+function xhrCheckNextRound() {
+	{{/* TODO: technically this is a race, since we could see a different state between now and when the template finishes executing; it's probably fine! */}}
+	xhrDo("GET", "/game/wait/state", {"next_state": "{{plus1 .State.StateCounter}}"}).then(
+		(xhr) => { window.location.reload(); },
+		(xhr) => {
+			if (xhr.chowski_aborted) {
+				console.log("hanging refresh poll cancelled; status="+xhr.status+"; responseText="+xhr.responseText+";");
+				return;
+			}
+			var desc = '';
+			for (const [key, val] of Object.entries(xhr)) {
+				if (desc != '') {
+					desc += '\n';
+				}
+				desc += key+':'+val;
+			}
+			alert("failure to check next round, you'll have to manually refresh; err="+xhr+"\n"+desc);
+		},
+	);
+	xhrCheckNextRound();
+}
+</script>
+
 </html>`))
 
 //<button style="max-width: 400px; width: 75%; aspect-ratio: 1/1;" onclick=
