@@ -8,7 +8,8 @@
 package main
 
 import (
-	"chowski3/common/automation/ytmgui"
+	"chowski3/common/automation/plexgui"
+	// "chowski3/common/automation/ytmgui"
 	"net"
 	"strings"
 
@@ -29,6 +30,7 @@ import (
 
 var (
 	playlistURL = flag.String("playlist-url", "https://music.youtube.com/playlist?list=PLN7UIWiGb1K5h8_iuyoKhmD-N9z0Jo3lG", "full URL for playlist to play")
+	plexPlaylist = flag.String("plex-playlist", "Mood 2025-09", "Name of the plex playlist to run the quiz on")
 	// skipInit      = flag.Bool("skip-init", false, "Assume that YouTube Music is in the foreground and ready to go; causes other various flags to be ignored")
 	persistFile   = flag.String("persist-file", "", "Restore from this file (if it exists), as well as store state to this file regularly")
 	persistPeriod = flag.Duration("persist-period", 30*time.Second, "Period between persisting state to --persist-file")
@@ -77,12 +79,19 @@ func main() {
 	///////////////////////////////
 
 	/////////////////////////////// NEW YTM SETUP
-	ytm := ytmgui.NewEmbedPlayer()
+	// ytm := ytmgui.NewEmbedPlayer()
+	///////////////////////////////
+
+	/////////////////////////////// NEW PLEX SETUP
+	plex, err := plexgui.NewPlexPlayer(*plexPlaylist)
+	if err != nil {
+		log.Fatalln("Error initializing plex connection:", err)
+	}
 	///////////////////////////////
 
 	var state *mqgame.State
 	if *persistFile == "" {
-		state = mqgame.NewState(ytm)
+		state = mqgame.NewState(plex)
 		goto ready
 	}
 	if data, err := os.ReadFile(*persistFile); err != nil {
@@ -90,8 +99,8 @@ func main() {
 			log.Fatalf("Failed reading %v: %v", *persistFile, err)
 		}
 		log.Printf("Creating fresh state (file %v had error %v)", *persistFile, err)
-		state = mqgame.NewState(ytm)
-	} else if state, err = mqgame.RestoreState(ytm, data); err != nil {
+		state = mqgame.NewState(plex)
+	} else if state, err = mqgame.RestoreState(plex, data); err != nil {
 		log.Fatalf("Failed to restore from %v: %v", *persistFile, err)
 	} else {
 		log.Printf("Restored state from %v", *persistFile)
@@ -126,5 +135,5 @@ ready:
 	if localIp == "" {
 		log.Fatalf("couldn't get local IP address")
 	}
-	mqhttpui.Run(mqhttpui.MultiguessGame{}, state, ytm, localIp + ":1123", localIp, browserCommand)
+	mqhttpui.Run(mqhttpui.MultiguessGame{}, state, plex, localIp + ":1123", localIp, browserCommand)
 }

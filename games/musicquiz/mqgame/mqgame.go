@@ -37,7 +37,6 @@ type State struct {
 	stateChans   []stateChan
 }
 
-// TODO: Make a new one of thesse?
 // http page that polls for action: 'play', 'pause', 'nextsong', and uses the YT player JS API to do it
 // https://developers.google.com/youtube/iframe_api_reference
 type MusicPlayer interface {

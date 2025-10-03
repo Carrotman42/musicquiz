@@ -36,6 +36,8 @@ func Run(ui UI, gamestate *mqgame.State, musicPlayer *ytmgui.EmbedMusicPlayer, a
 
 	// YTM host controller setup
 	ytmgui.InitEmbedGui(http.DefaultServeMux, musicPlayer, addr, browserCommand)
+	// TODO: initialize plex the same way
+	//http.HandleFunc("/auth/plex/forward", 
 
 	log.Printf("Serving on %v with cookie domain %v", addr, domain)
 	log.Fatal(http.ListenAndServe(addr, nil))
