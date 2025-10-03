@@ -16,6 +16,8 @@ type SongInfo struct {
 	Title   string
 	Artist  string
 	Album   string
+
+	// TODO: Only used in the YTM embed GUI version, can probably get rid of it.
 	VideoID string
 }
 

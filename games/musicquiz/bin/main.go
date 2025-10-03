@@ -29,8 +29,8 @@ import (
 )
 
 var (
-	playlistURL = flag.String("playlist-url", "https://music.youtube.com/playlist?list=PLN7UIWiGb1K5h8_iuyoKhmD-N9z0Jo3lG", "full URL for playlist to play")
 	plexPlaylist = flag.String("plex-playlist", "Mood 2025-09", "Name of the plex playlist to run the quiz on")
+	// playlistURL = flag.String("playlist-url", "https://music.youtube.com/playlist?list=PLN7UIWiGb1K5h8_iuyoKhmD-N9z0Jo3lG", "full URL for playlist to play")
 	// skipInit      = flag.Bool("skip-init", false, "Assume that YouTube Music is in the foreground and ready to go; causes other various flags to be ignored")
 	persistFile   = flag.String("persist-file", "", "Restore from this file (if it exists), as well as store state to this file regularly")
 	persistPeriod = flag.Duration("persist-period", 30*time.Second, "Period between persisting state to --persist-file")

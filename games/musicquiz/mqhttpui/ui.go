@@ -2,7 +2,7 @@ package mqhttpui
 
 import (
 	"bytes"
-	"chowski3/common/automation/ytmgui"
+	"chowski3/common/automation/plexgui"
 	"chowski3/common/ksuite/kjs"
 	"chowski3/games/musicquiz/mqgame"
 	"chowski3/games/musicquiz/mqgame/data"
@@ -20,7 +20,7 @@ type UI interface {
 	RenderPage(io.Writer, *mqgame.State, *data.Player, *http.Request) error
 }
 
-func Run(ui UI, gamestate *mqgame.State, musicPlayer *ytmgui.EmbedMusicPlayer, addr string, domain string, browserCommand *string) {
+func Run(ui UI, gamestate *mqgame.State, musicPlayer *plexgui.PlexPlayer, addr string, domain string, browserCommand *string) {
 	s := server{ui, gamestate}
 	// Non-logged-in handlers:
 	http.HandleFunc("/login", s.loginHandler(domain))
@@ -35,9 +35,7 @@ func Run(ui UI, gamestate *mqgame.State, musicPlayer *ytmgui.EmbedMusicPlayer, a
 	http.HandleFunc("/secret-backdoor", s.loggedInHandler(s.secretBackdoor))
 
 	// YTM host controller setup
-	ytmgui.InitEmbedGui(http.DefaultServeMux, musicPlayer, addr, browserCommand)
-	// TODO: initialize plex the same way
-	//http.HandleFunc("/auth/plex/forward", 
+	musicPlayer.InitPlexGui(http.DefaultServeMux, addr, browserCommand)
 
 	log.Printf("Serving on %v with cookie domain %v", addr, domain)
 	log.Fatal(http.ListenAndServe(addr, nil))

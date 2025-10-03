@@ -1,1 +1,47 @@
-<!-- TODO -->
+<html>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<audio controls id="player"></audio>
+<br/>
+<iframe src="/scoreboard" id="scoreboard" style="border:none; width:100%; height:100%;"></iframe>
+
+<script>
+  // Initialize music player
+  // (api: https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement)
+  var player = document.getElementById('player');
+  var scoreboard = document.getElementById('scoreboard');
+
+  const socket = new WebSocket("ws://" + window.location.host + "/host/comms");
+  socket.addEventListener("open", (event) => {
+    console.log("Socket opened successfully!");
+  })
+  socket.addEventListener("message", (event) => {
+    console.log('Next YTM player action:');
+    console.log(event);
+    if (event.data == "WAIT") {
+      // There's another host window open, let them have it and don't play ours
+      player.pause();
+    } else if (event.data == "play") {
+      player.play();
+    } else if (event.data == "pause") {
+      player.pause();
+    } else if (event.data.startsWith("next")) {
+      player.src = event.data.substr("next:".length);
+      player.load();
+      player.play();
+      // Also, refresh the scoreboard when the new round starts
+      scoreboard.contentWindow.location.reload();
+
+      // } else if (event.data == "seek") {
+      // TODO: It looks like this event type got deleted? I don't even see it on the list from YTMEmbedGUI. Might have been deleted by me when I couldn't do it with embeds but *shrug* can implement later if needed
+      //   player.fastSeek(player.currentTime + success.secs);
+    } else {
+      console.log('Unrecognized action: "' + event.data + '"');
+      socket.send("ERR:UNRECOGNIZED_ACTION:" + event.data);
+      return;
+    }
+    socket.send("OK")
+  });
+</script>
+
+</html>

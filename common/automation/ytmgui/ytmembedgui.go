@@ -44,17 +44,11 @@ func InitEmbedGui(server *http.ServeMux, mp *EmbedMusicPlayer, addr string, brow
 
 	// Create a middleman interface that shuttles actions between the YTM iframe and the rest of the app/game
 	server.Handle("/host/comms", websocket.Handler(mp.connectHost))
-	// server.HandleFunc("/host/wait/nextYtmAction", func(wr http.ResponseWriter, req *http.Request) {
-	// 	action := <-mp.ch
-	// 	_, err := wr.Write([]byte(action))
-	// 	if err != nil {
-	// 		http.Error(wr, "error writing action string", 500)
-	// 	}
-	// })
 
 	// Launch the first host page
-	log.Printf("Launching browser at 'http://%s/host'...", addr)
-	cmd := exec.Command("/bin/sh", "-c", *browserCommand + " http://" + addr + "/host")
+	url := "http://" + addr + "/host"
+	log.Printf("Launching browser at '%s'...", url)
+	cmd := exec.Command("/bin/sh", "-c", *browserCommand + " " + url)
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 	if err := cmd.Start(); err != nil {

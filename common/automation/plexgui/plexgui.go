@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
@@ -20,8 +21,9 @@ import (
 
 type PlexPlayer struct {
 	// Initialized, authenticated Plex API
-	plex   *plexclient.PlexConnection
-	tracks []plexclient.Track
+	plex      *plexclient.PlexConnection
+	tracks    []plexclient.Track
+	nextTrack int
 
 	// Websocket state
 	hostConnected atomic.Bool
@@ -59,17 +61,21 @@ func NewPlexPlayer(playlist string) (*PlexPlayer, error) {
 			break
 		}
 	}
+	rand.Shuffle(len(tracks), func(i, j int) {
+		tracks[i], tracks[j] = tracks[j], tracks[i]
+	})
 
 	return &PlexPlayer{
 		plex:          plex,
 		tracks:        tracks,
+		nextTrack:     0,
 		hostConnected: atomic.Bool{},
 		commands:      make(chan string),
 		errors:        make(chan string),
 	}, nil
 }
 
-func InitPlexGui(server *http.ServeMux, player *PlexPlayer, addr string, browserCommand *string) {
+func (player *PlexPlayer) InitPlexGui(server *http.ServeMux, addr string, browserCommand *string) {
 	// Serve the HTML/JS for the host page
 	server.HandleFunc("/host", func(wr http.ResponseWriter, req *http.Request) {
 		hostTemplate.Execute(wr, "unused initial data")
@@ -79,8 +85,9 @@ func InitPlexGui(server *http.ServeMux, player *PlexPlayer, addr string, browser
 	server.Handle("/host/comms", websocket.Handler(player.connectHost))
 
 	// Launch the first host page
-	log.Printf("Launching browser at 'http://%s/host'...", addr)
-	cmd := exec.Command("/bin/sh", "-c", *browserCommand+" http://"+addr+"/host")
+	url := "http://" + addr + "/host"
+	log.Printf("Launching browser at '%s'...", url)
+	cmd := exec.Command("/bin/sh", "-c", *browserCommand+" "+url)
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 	if err := cmd.Start(); err != nil {
@@ -89,12 +96,16 @@ func InitPlexGui(server *http.ServeMux, player *PlexPlayer, addr string, browser
 	log.Printf("Launched: %d", cmd.Process.Pid)
 }
 
+// TODO: This is buggy, refreshing the host page breaks the game
 func (player *PlexPlayer) connectHost(conn *websocket.Conn) {
 	// Wait until we're the only host
 	for !player.hostConnected.CompareAndSwap(false, true) {
 		conn.Write([]byte(wait))
 		time.Sleep(5 * time.Second)
 	}
+
+	// Give up our spot as host if/when websocket closes for any reason
+	defer player.hostConnected.Store(false)
 
 	// We're the only host! Pass messages back and forth until the connection is
 	// closed.
@@ -122,39 +133,50 @@ func (player *PlexPlayer) connectHost(conn *websocket.Conn) {
 	}
 
 	// Websocket is closed, give up our spot as host (errors have already been sent back)
-	player.hostConnected.Store(false)
+	defer player.hostConnected.Store(false)
 }
 
-// TODO DO NOT SUBMIT: implement commands
-// TODO DO NOT SUBMIT: implement http page so that we can actually do command-y things
-
-func (mp *PlexPlayer) checkError() error {
-	err := <-mp.errors
+func (plex *PlexPlayer) checkError() error {
+	err := <-plex.errors
 	if err != ok {
 		return fmt.Errorf(err)
 	}
 	return nil
 }
 
-func (mp *PlexPlayer) Play() error {
+func (plex *PlexPlayer) Play() error {
 	log.Printf("Sending 'play' to websocket")
-	mp.commands <- "play"
+	plex.commands <- "play"
 	log.Printf("Sent 'play' to websocket, waiting for return")
-	err := mp.checkError()
+	err := plex.checkError()
 	log.Printf("Got return %v from websocket", err)
 	return err
 
 }
-func (mp *PlexPlayer) Pause() error {
-	mp.commands <- "pause"
-	return mp.checkError()
+
+func (plex *PlexPlayer) Pause() error {
+	plex.commands <- "pause"
+	return plex.checkError()
 }
-func (mp *PlexPlayer) NextSong(context.Context) (data.SongInfo, error) {
-	return data.SongInfo{}, fmt.Errorf("Cannot call NextSong method on an embed player")
+
+func (plex *PlexPlayer) NextSong(context.Context) (data.SongInfo, error) {
+	track := plex.tracks[plex.nextTrack]
+	// (loop back to the beginning if we hit the end of the track list, just to make sure it never crashes?)
+	plex.nextTrack = (plex.nextTrack + 1) % len(plex.tracks)
+
+	cmd := "next:" + plex.plex.GetStreamUrl(&track)
+	log.Println("Sending 'next song' command:", cmd)
+	plex.commands <- cmd
+
+	return data.SongInfo{
+		Title:  track.Title,
+		Album:  track.Album,
+		Artist: track.Artist,
+	}, plex.checkError()
 }
-func (mp *PlexPlayer) ChangeSong(song data.SongInfo) error {
-	mp.commands <- "next:" + song.VideoID
-	return mp.checkError()
+
+func (plex *PlexPlayer) ChangeSong(song data.SongInfo) error {
+	return fmt.Errorf("Cannot call NextSong method on a Plex player")
 }
 
 //go:embed plexgui.html

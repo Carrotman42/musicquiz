@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log"
 	"maps"
-	"math/rand/v2"
 	"slices"
 	"sync"
 )
@@ -37,8 +36,6 @@ type State struct {
 	stateChans   []stateChan
 }
 
-// http page that polls for action: 'play', 'pause', 'nextsong', and uses the YT player JS API to do it
-// https://developers.google.com/youtube/iframe_api_reference
 type MusicPlayer interface {
 	Play() error
 	Pause() error
@@ -288,16 +285,16 @@ func (s *State) BeginRound(ctx context.Context) error {
 		return ErrRoundAlreadyStarted
 	}
 
-	// TODO: Can't call this, need to fetch from YTM API
-	songChoices := []data.SongInfo{
-		{VideoID: "JNShEGKiDZo", Title: "December, 1963"},
-		{VideoID: "WdhT8wKJL6c", Title: "Mandolin Moon"},
-		{VideoID: "LpQelRVg5H8", Title: "Rockstar"},
-		{VideoID: "bwqlUzHBXHs", Title: "Geometry &c."},
-	}
-	nextSong := songChoices[rand.N(len(songChoices))]
-	// nextSong, err := s.musicPlayer.NextSong(ctx)
-	err := s.musicPlayer.ChangeSong(nextSong)
+	// // TODO: Can't call this, need to fetch from YTM API
+	// songChoices := []data.SongInfo{
+	// 	{VideoID: "JNShEGKiDZo", Title: "December, 1963"},
+	// 	{VideoID: "WdhT8wKJL6c", Title: "Mandolin Moon"},
+	// 	{VideoID: "LpQelRVg5H8", Title: "Rockstar"},
+	// 	{VideoID: "bwqlUzHBXHs", Title: "Geometry &c."},
+	// }
+	// nextSong := songChoices[rand.N(len(songChoices))]
+	nextSong, err := s.musicPlayer.NextSong(ctx)
+	// err := s.musicPlayer.ChangeSong(nextSong)
 	if err != nil {
 		return fmt.Errorf("BeginRound: %w", err)
 	}

@@ -32,7 +32,7 @@ type PlexConnection struct {
 
 // A playlist of tracks
 type Playlist struct {
-	Name string
+	Name      string
 	NumTracks int
 
 	key string
@@ -142,10 +142,6 @@ func (plex *PlexConnection) ListPlaylistContents(playlist Playlist) (*[]Track, e
 	tracks := make([]Track, playlistContents.MediaContainer.Size)
 	for i := range playlistContents.MediaContainer.Size {
 		t := playlistContents.MediaContainer.Metadata[i]
-		dumped, _ := json.Marshal(t)
-		if i < 3 {
-			fmt.Println("Track:", string(dumped))
-		}
 		tracks[i] = Track{Artist: t.GrandparentTitle, Title: t.Title, Album: t.ParentTitle, key: t.Key}
 	}
 	return &tracks, nil
@@ -179,6 +175,15 @@ func (plex *PlexConnection) DownloadSong(song string, outfile string) {
 		fmt.Println("Error writing to "+outfile, err)
 	}
 	fmt.Println("Wrote mp3 bytes to " + outfile)
+}
+
+func (plex *PlexConnection) GetStreamUrl(track *Track) string {
+	// TODO: Always start at the beginning of the song for now?
+	startOffset := 0
+
+	return fmt.Sprintf(
+		"%s/music/:/transcode/universal/start?offset=%d&path=%s&X-Plex-Token=%s&X-Plex-Platform=Chrome",
+		plex.url, startOffset, track.key, plex.hostToken)
 }
 
 // Create a request for an individual API (e.g. "POST", "/downloadQueue") on an individual plex media server
@@ -299,7 +304,7 @@ type Metadata struct {
 	Index                int       `json:"index"`
 	Key                  string    `json:"key"`
 	LastViewedAt         int       `json:"lastViewedAt"`
-	LeafCount int `json:"leafCount"`
+	LeafCount            int       `json:"leafCount"`
 	LibrarySectionID     int       `json:"librarySectionID"`
 	LibrarySectionKey    string    `json:"librarySectionKey"`
 	LibrarySectionTitle  string    `json:"librarySectionTitle"`
