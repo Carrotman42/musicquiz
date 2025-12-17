@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"time"
 )
@@ -40,7 +41,11 @@ type GetSongResponse struct {
 	//  - streamingData.formats[*].signatureCipher (s=...&sp=sig&url=...)
 	//  - streamingData.adaptiveFormats[*].signatureCipher (same)
 	StreamingData struct {
-		ServerAbrStreamingUrl string `json:"serverAbrStreamingUrl"`
+		Formats []StreamingFormat `json:"formats"`
+		AdaptiveFormats []StreamingFormat `json:"adaptiveFormats"`
+
+		// TODO I think this is for ads, not streaming
+		// ServerAbrStreamingUrl string `json:"serverAbrStreamingUrl"`
 	} `json:"streamingData"`
 
 	// Title and artist (a.k.a. "author")
@@ -61,6 +66,12 @@ type GetSongResponse struct {
 			} `json:"videoDetails"`
 		} `json:"microformatDataRenderer"`
 	} `json:"microformat"`
+}
+
+type StreamingFormat struct {
+	MimeType string `json:"mimeType"`
+	ApproxDurationMs string `json:"approxDurationMs"`
+	SignatureCipher string `json:"signatureCipher"`
 }
 
 const apiBase = "https://music.youtube.com/youtubei/v1/"
@@ -84,7 +95,7 @@ type Client struct {
 func (c *Client) _CacheYtmHeaders() error {
 	fmt.Printf("Caching YTM headers\n")
 	ctx := context.Background()
-	resp, err := c.get(ctx, "", nil)
+	resp, err := c.get(ctx, "https://music.youtube.com", nil)
 
 	if err != nil {
 		return fmt.Errorf("header get failed: %v", err)
@@ -118,9 +129,10 @@ func (c *Client) _CacheYtmHeaders() error {
 
 // TODO DO NOT SUBMIT: Probably hacky
 // the http response will probably be cut off if you cancel the context.
-func (c *Client) get(ctx context.Context, endpoint string, urlParams url.Values) (*http.Response, error) {
+func (c *Client) get(ctx context.Context, url string, urlParams url.Values) (*http.Response, error) {
 	// u := apiBase + endpoint
-	u := "https://music.youtube.com" + endpoint
+	// u := "https://music.youtube.com" + endpoint
+	u := url // TODO: don't need to redefine if I keep this
 	if len(urlParams) > 0 {
 		u += "?" + urlParams.Encode()
 	}
@@ -246,11 +258,19 @@ func (c *Client) GetSong(ctx context.Context, id string) (GetSongResponse, error
 	if err != nil {
 		return GetSongResponse{}, fmt.Errorf("read post result failed: %v", err)
 	}
-	// os.WriteFile("getsongresponse.json", bs, 0644)
+	os.WriteFile("getsongresponse.json", bs, 0644)
 	var ret GetSongResponse
 	// fmt.Printf("getsong raw response: %s", string(bs))
 	if err := json.Unmarshal(bs, &ret); err != nil {
 		return GetSongResponse{}, fmt.Errorf("unmarshal: %v", err)
 	}
 	return ret, nil
+}
+
+func (c *Client) StreamSong(ctx context.Context, url string) (io.ReadCloser, error) {
+	resp, err := c.get(ctx, url, nil);
+	if err != nil {
+		return nil, err
+	}
+	return resp.Body, nil
 }

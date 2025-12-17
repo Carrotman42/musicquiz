@@ -1,12 +1,14 @@
 package mqgame
 
 import (
+	"chowski3/games/musicquiz/mqgame/data"
 	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
+	"net/http"
 	"slices"
 	"sync"
 )
@@ -14,7 +16,7 @@ import (
 func NewState(mp MusicPlayer) *State {
 	return &State{
 		musicPlayer: mp,
-		players:     make(map[string]*Player),
+		players:     make(map[string]*data.Player),
 		gameState:   new(multiguessGame),
 	}
 }
@@ -24,7 +26,7 @@ type State struct {
 	gameState   *multiguessGame
 
 	mu        sync.Mutex
-	players   map[string]*Player
+	players   map[string]*data.Player
 	songState SongState
 	// incremented any time a modification to the state of the system was
 	// maybe made; supports hanging polls for auto-refreshing the browser.
@@ -35,10 +37,15 @@ type State struct {
 }
 
 type MusicPlayer interface {
-	Play()
-	Pause()
-	//Seek(deltaSeconds int)
-	NextSong(context.Context) (SongInfo, error)
+	Play() error
+	Pause() error
+	// TODO: Appears unused, so not bothering to implement it in new modes where it's complicated.
+	// Seek(deltaSeconds int)
+	NextSong(context.Context) (data.SongInfo, error)
+	ChangeSong(data.SongInfo) error
+
+	// Perform any setup on the HTTP server (e.g. register new endpoints) if necessary
+	InitGui(server *http.ServeMux, addr string, browserCommand *string)
 }
 
 // TODO: properly marshal an ongoing round, right now it will (probably) be
@@ -66,25 +73,18 @@ func RestoreState(mp MusicPlayer, marshaled []byte) (*State, error) {
 	}
 	nm := make(normmap)
 	for i := range m.Rounds {
-		m.Rounds[i].normalizePlayers(nm)
+		m.Rounds[i].NormalizePlayers(nm)
 	}
 	return &State{
 		musicPlayer: mp,
-		players:     make(map[string]*Player),
+		players:     make(map[string]*data.Player),
 		gameState: &multiguessGame{
 			rounds: m.Rounds,
 		},
 	}, nil
 }
 
-type Player struct {
-	Name string
-
-	// NOTE: *Player values are marshaled directly (via GuessRound et.
-	// al.), so don't put any interesting in here without fixing that.
-}
-
-func (s *State) Player(name string) (*Player, bool) {
+func (s *State) Player(name string) (*data.Player, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -92,14 +92,14 @@ func (s *State) Player(name string) (*Player, bool) {
 	return p, ok
 }
 
-func (s *State) NewPlayer(name string) (*Player, error) {
+func (s *State) NewPlayer(name string) (*data.Player, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if _, ok := s.players[name]; ok {
 		return nil, fmt.Errorf("player %q already in the game!", name)
 	}
-	p := &Player{
+	p := &data.Player{
 		Name: name,
 	}
 	s.players[name] = p
@@ -120,11 +120,11 @@ func (s *State) KickPlayer(name string) error {
 	return nil
 }
 
-func (s *State) Players() []*Player {
+func (s *State) Players() []*data.Player {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return slices.SortedFunc(maps.Values(s.players), func(a, b *Player) int {
+	return slices.SortedFunc(maps.Values(s.players), func(a, b *data.Player) int {
 		return cmp.Compare(a.Name, b.Name)
 	})
 }
@@ -211,7 +211,7 @@ func (s *State) Rounds() []GuessRound {
 	return s.gameState.Rounds()
 }
 
-func (s *State) PlayerGuess(p *Player, title string) (gotIt bool, _ error) {
+func (s *State) PlayerGuess(p *data.Player, title string) (gotIt bool, _ error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// increment for good measure, even if there's an error below.
@@ -224,7 +224,7 @@ func (s *State) PlayerGuess(p *Player, title string) (gotIt bool, _ error) {
 	return gotIt, err
 }
 
-func (s *State) PlayerPass(p *Player) error {
+func (s *State) PlayerPass(p *data.Player) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -240,7 +240,7 @@ func (s *State) PlayerPass(p *Player) error {
 
 func (s *State) lockedCheckRoundDone() {
 	// Because a player may have been kicked, we have to actually check subsets.
-	allPlayers := make(map[*Player]bool, len(s.players))
+	allPlayers := make(map[*data.Player]bool, len(s.players))
 	for _, p := range s.players {
 		allPlayers[p] = true
 	}
@@ -248,12 +248,12 @@ func (s *State) lockedCheckRoundDone() {
 		delete(allPlayers, p)
 	}
 	if len(allPlayers) == 0 {
-		s.gameState.SetCurrentSong(SongInfo{})
+		s.gameState.SetCurrentSong(data.SongInfo{})
 		s.lockedIncStateCounter()
 	}
 }
 
-func (s *State) PlayerContest(p *Player, title string) error {
+func (s *State) PlayerContest(p *data.Player, title string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -263,7 +263,7 @@ func (s *State) PlayerContest(p *Player, title string) error {
 	return s.gameState.PlayerContest(p, title, allPlayers)
 }
 
-func (s *State) PlayerContestVote(other *Player, guessPlayerName, title string, shouldCount bool) error {
+func (s *State) PlayerContestVote(other *data.Player, guessPlayerName, title string, shouldCount bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

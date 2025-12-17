@@ -63,7 +63,7 @@ def findurl(vid, print_api_response):
 
 
 if __name__ == '__main__':
-    main(flags.parse_args(), print_api_response=False)
+    main(flags.parse_args(), print_api_response=True)
 
 
 

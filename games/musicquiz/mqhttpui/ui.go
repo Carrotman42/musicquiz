@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"chowski3/common/ksuite/kjs"
 	"chowski3/games/musicquiz/mqgame"
+	"chowski3/games/musicquiz/mqgame/data"
 	"errors"
 	"fmt"
 	"html/template"
@@ -15,10 +16,10 @@ import (
 )
 
 type UI interface {
-	RenderPage(io.Writer, *mqgame.State, *mqgame.Player, *http.Request) error
+	RenderPage(io.Writer, *mqgame.State, *data.Player, *http.Request) error
 }
 
-func Run(ui UI, gamestate *mqgame.State, addr string, domain string) {
+func Run(ui UI, gamestate *mqgame.State, musicPlayer mqgame.MusicPlayer, addr string, domain string, browserCommand *string) {
 	s := server{ui, gamestate}
 	// Non-logged-in handlers:
 	http.HandleFunc("/login", s.loginHandler(domain))
@@ -27,15 +28,18 @@ func Run(ui UI, gamestate *mqgame.State, addr string, domain string) {
 	// Logged-in handlers:
 	http.HandleFunc("/", s.loggedInHandler(s.index))
 	http.HandleFunc("/game", s.loggedInHandler(s.game))
+	http.HandleFunc("/scoreboard", func(wr http.ResponseWriter, req *http.Request) { s.game(wr, req, nil) })
 	http.HandleFunc("/game/action/{action}", s.loggedInHandler(s.gameAction))
 	http.HandleFunc("/game/wait/state", s.loggedInHandler(s.waitState))
 	http.HandleFunc("/secret-backdoor", s.loggedInHandler(s.secretBackdoor))
+
+	musicPlayer.InitGui(http.DefaultServeMux, addr, browserCommand)
 
 	log.Printf("Serving on %v with cookie domain %v", addr, domain)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
 
-func (s server) loggedInHandler(cb func(http.ResponseWriter, *http.Request, *mqgame.Player) error) http.HandlerFunc {
+func (s server) loggedInHandler(cb func(http.ResponseWriter, *http.Request, *data.Player) error) http.HandlerFunc {
 	return func(resp http.ResponseWriter, req *http.Request) {
 		p, err := s.getPlayer(req)
 		if err != nil {
@@ -60,7 +64,7 @@ const (
 	playerNameCookie = "player-name-2"
 )
 
-func (s server) getPlayer(req *http.Request) (*mqgame.Player, error) {
+func (s server) getPlayer(req *http.Request) (*data.Player, error) {
 	c, err := req.Cookie(playerNameCookie)
 	if err != nil {
 		return nil, fmt.Errorf("player not logged in: %w", err)
@@ -131,7 +135,7 @@ func (s server) loginHandler(domain string) http.HandlerFunc {
 	}
 }
 
-func (s server) index(wr http.ResponseWriter, req *http.Request, p *mqgame.Player) error {
+func (s server) index(wr http.ResponseWriter, req *http.Request, p *data.Player) error {
 	http.Redirect(wr, req, "/game", http.StatusFound)
 	return nil
 }
@@ -163,11 +167,11 @@ var secretBackdoorTmpl = template.Must(template.New("secretBackdoorTmpl").Parse(
 </html>
 `))
 
-func (s server) secretBackdoor(wr http.ResponseWriter, req *http.Request, p *mqgame.Player) error {
-	if p.Name != "kev" {
-		http.Redirect(wr, req, "/", http.StatusFound)
-		return nil
-	}
+func (s server) secretBackdoor(wr http.ResponseWriter, req *http.Request, p *data.Player) error {
+	// if p.Name != "kev" {
+	// 	http.Redirect(wr, req, "/", http.StatusFound)
+	// 	return nil
+	// }
 	if req.Method != "POST" {
 		goto renderPage
 	}
@@ -181,10 +185,14 @@ func (s server) secretBackdoor(wr http.ResponseWriter, req *http.Request, p *mqg
 		default:
 			err = fmt.Errorf("unknown action %q", act)
 		case "play":
+			log.Printf("running command 'play'")
 			err = s.Play()
+			log.Printf("ran command 'play'")
 		case "pause":
+			log.Printf("running command 'pause'")
 			err = s.Pause()
 		case "kick":
+			log.Printf("running command 'kick'")
 			err = s.KickPlayer(req.Form.Get("player_name"))
 		}
 		if err != nil {
@@ -205,7 +213,7 @@ renderPage:
 	return nil
 }
 
-func (s server) game(wr http.ResponseWriter, req *http.Request, p *mqgame.Player) error {
+func (s server) game(wr http.ResponseWriter, req *http.Request, p *data.Player) error {
 	buf := new(bytes.Buffer)
 	if err := s.UI.RenderPage(buf, s.State, p, req); err != nil {
 		http.Error(wr, "Template error: "+err.Error(), 500)
@@ -217,7 +225,7 @@ func (s server) game(wr http.ResponseWriter, req *http.Request, p *mqgame.Player
 	return nil
 }
 
-func (s server) gameAction(wr http.ResponseWriter, req *http.Request, p *mqgame.Player) error {
+func (s server) gameAction(wr http.ResponseWriter, req *http.Request, p *data.Player) error {
 	if req.Method != "POST" {
 		http.Error(wr, "must POST bro", http.StatusMethodNotAllowed)
 		return fmt.Errorf("want POST for game action, got %q", req.Method)
@@ -266,7 +274,7 @@ actionSwitch:
 	return nil
 }
 
-func (s server) waitState(wr http.ResponseWriter, req *http.Request, p *mqgame.Player) error {
+func (s server) waitState(wr http.ResponseWriter, req *http.Request, p *data.Player) error {
 	nextStr := req.URL.Query().Get("next_state")
 	fmt.Printf("%v is waiting for round %v (currently %d)\n", p.Name, nextStr, s.StateCounter())
 	next, err := strconv.Atoi(nextStr)
