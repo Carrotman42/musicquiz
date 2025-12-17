@@ -5,9 +5,8 @@
 
 <div id="player"></div>
 
-<!-- TODO: Invisible YTM embed page, and websocket/polling controller for it? -->
 
-<!-- TODO: Websockets, not long polling... -->
+<!-- Set up websockets for back-and-forth commands -->
 <script>
   const socket = new WebSocket("ws://" + window.location.host + "/host/comms");
   socket.addEventListener("open", (event) => {
@@ -37,25 +36,6 @@
   });
 
 
-  // xhrDo("POST", "/host/wait/nextYtmAction", {"next_state": "TODO"}).then(
-  //   (success) => {
-  //     console.log('Next YTM player action:');
-  //     console.log(success);
-  //     if (event.data == "play") {
-  //       player.playVideo();
-  //     } else if (event.data == "pause") {
-  //       player.pauseVideo();
-  //     } else if (event.data == "next") {
-  //       player.loadVideoById(success.songId);
-  //     } else if (event.data == "seek") {
-  //       player.seekTo(player.getCurrentTime() + success.secs);
-  //     } else {
-  //       console.log('Unrecognized action: "' + event.data + '"');
-  //     }
-  //   },
-  //   (failure) => { },
-  // );
-
   // This automatically runs when the API has finished loading
   var player;
   function onYouTubeIframeAPIReady() {
@@ -78,7 +58,7 @@
         // - 100: Video not found (removed or marked as private)
         'onError': (e) => {
           if (e.data == 150 || e.data == 100) {
-            // TODO DO NOT SUBMIT: Screw you YTM! Setting this for basically every single song.
+            // TODO: Screw you YTM! Setting this for basically every single song.
             console.log('Video not allowed in embedded players: ' + e.target.playerInfo.videoUrl);
           }
           console.log('Unknown error loading YT player:');

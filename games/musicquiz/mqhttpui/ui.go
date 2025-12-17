@@ -2,7 +2,6 @@ package mqhttpui
 
 import (
 	"bytes"
-	"chowski3/common/automation/plexgui"
 	"chowski3/common/ksuite/kjs"
 	"chowski3/games/musicquiz/mqgame"
 	"chowski3/games/musicquiz/mqgame/data"
@@ -20,7 +19,7 @@ type UI interface {
 	RenderPage(io.Writer, *mqgame.State, *data.Player, *http.Request) error
 }
 
-func Run(ui UI, gamestate *mqgame.State, musicPlayer *plexgui.PlexPlayer, addr string, domain string, browserCommand *string) {
+func Run(ui UI, gamestate *mqgame.State, musicPlayer mqgame.MusicPlayer, addr string, domain string, browserCommand *string) {
 	s := server{ui, gamestate}
 	// Non-logged-in handlers:
 	http.HandleFunc("/login", s.loginHandler(domain))
@@ -34,8 +33,7 @@ func Run(ui UI, gamestate *mqgame.State, musicPlayer *plexgui.PlexPlayer, addr s
 	http.HandleFunc("/game/wait/state", s.loggedInHandler(s.waitState))
 	http.HandleFunc("/secret-backdoor", s.loggedInHandler(s.secretBackdoor))
 
-	// YTM host controller setup
-	musicPlayer.InitPlexGui(http.DefaultServeMux, addr, browserCommand)
+	musicPlayer.InitGui(http.DefaultServeMux, addr, browserCommand)
 
 	log.Printf("Serving on %v with cookie domain %v", addr, domain)
 	log.Fatal(http.ListenAndServe(addr, nil))
@@ -292,5 +290,3 @@ func (s server) waitState(wr http.ResponseWriter, req *http.Request, p *data.Pla
 		return nil
 	}
 }
-
-//<button style="max-width: 400px; width: 75%; aspect-ratio: 1/1;" onclick=

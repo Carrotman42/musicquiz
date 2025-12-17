@@ -75,7 +75,7 @@ func NewPlexPlayer(playlist string) (*PlexPlayer, error) {
 	}, nil
 }
 
-func (player *PlexPlayer) InitPlexGui(server *http.ServeMux, addr string, browserCommand *string) {
+func (player *PlexPlayer) InitGui(server *http.ServeMux, addr string, browserCommand *string) {
 	// Serve the HTML/JS for the host page
 	server.HandleFunc("/host", func(wr http.ResponseWriter, req *http.Request) {
 		hostTemplate.Execute(wr, "unused initial data")

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os/exec"
 	"strings"
 	"time"
@@ -31,12 +32,12 @@ func (p *Player) keypress(code oslevelinput.EventCode) {
 
 func (p *Player) Play() error {
 	p.keypress(oslevelinput.KEY_SPACE)
-	return nil; // TODO: Can't detect errors, but I don't care
+	return nil // TODO: Can't detect errors, but I don't care
 }
 
 func (p *Player) Pause() error {
 	p.keypress(oslevelinput.KEY_SPACE)
-	return nil; // TODO: Can't detect errors, but I don't care
+	return nil // TODO: Can't detect errors, but I don't care
 }
 
 func (p *Player) ChangeSong(song data.SongInfo) error {
@@ -224,3 +225,5 @@ func (p *Player) waitForSongToNotBe(ctx context.Context, not data.SongInfo) (ret
 		}
 	}
 }
+
+func (p *Player) InitGui(server *http.ServeMux, addr string, browserCommand *string) {}

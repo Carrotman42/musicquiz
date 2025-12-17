@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"maps"
+	"net/http"
 	"slices"
 	"sync"
 )
@@ -39,9 +39,13 @@ type State struct {
 type MusicPlayer interface {
 	Play() error
 	Pause() error
-	//Seek(deltaSeconds int)
+	// TODO: Appears unused, so not bothering to implement it in new modes where it's complicated.
+	// Seek(deltaSeconds int)
 	NextSong(context.Context) (data.SongInfo, error)
 	ChangeSong(data.SongInfo) error
+
+	// Perform any setup on the HTTP server (e.g. register new endpoints) if necessary
+	InitGui(server *http.ServeMux, addr string, browserCommand *string)
 }
 
 // TODO: properly marshal an ongoing round, right now it will (probably) be
@@ -285,16 +289,7 @@ func (s *State) BeginRound(ctx context.Context) error {
 		return ErrRoundAlreadyStarted
 	}
 
-	// // TODO: Can't call this, need to fetch from YTM API
-	// songChoices := []data.SongInfo{
-	// 	{VideoID: "JNShEGKiDZo", Title: "December, 1963"},
-	// 	{VideoID: "WdhT8wKJL6c", Title: "Mandolin Moon"},
-	// 	{VideoID: "LpQelRVg5H8", Title: "Rockstar"},
-	// 	{VideoID: "bwqlUzHBXHs", Title: "Geometry &c."},
-	// }
-	// nextSong := songChoices[rand.N(len(songChoices))]
 	nextSong, err := s.musicPlayer.NextSong(ctx)
-	// err := s.musicPlayer.ChangeSong(nextSong)
 	if err != nil {
 		return fmt.Errorf("BeginRound: %w", err)
 	}
@@ -316,9 +311,7 @@ func (s *State) Play() error {
 		return ErrAlreadyPlaying
 	}
 	if s.musicPlayer != nil {
-		log.Printf("calling play on music player")
 		s.musicPlayer.Play()
-		log.Printf("called play on music player")
 	}
 	s.songState.Playing = true
 	return nil

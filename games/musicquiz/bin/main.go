@@ -9,89 +9,97 @@ package main
 
 import (
 	"chowski3/common/automation/plexgui"
-	// "chowski3/common/automation/ytmgui"
+	"chowski3/common/automation/ytmgui"
 	"net"
 	"strings"
 
-	// "chowski3/common/oslevelinput"
+	"chowski3/common/oslevelinput"
 	"chowski3/games/musicquiz/mqgame"
 	"chowski3/games/musicquiz/mqhttpui"
 
-	// "context"
+	"context"
 	"errors"
 	"flag"
 	"log"
 
-	// "maps"
+	"maps"
 	"os"
-	// "slices"
+	"slices"
 	"time"
 )
 
 var (
-	plexPlaylist = flag.String("plex-playlist", "Mood 2025-09", "Name of the plex playlist to run the quiz on")
-	// playlistURL = flag.String("playlist-url", "https://music.youtube.com/playlist?list=PLN7UIWiGb1K5h8_iuyoKhmD-N9z0Jo3lG", "full URL for playlist to play")
-	// skipInit      = flag.Bool("skip-init", false, "Assume that YouTube Music is in the foreground and ready to go; causes other various flags to be ignored")
+	mode = flag.String("mode", "plex", "Mode of operation -- must be either 'plex' or 'ytm'.")
+
+	// YTM Flags
+	playlistURL = flag.String("playlist-url", "https://music.youtube.com/playlist?list=PLN7UIWiGb1K5h8_iuyoKhmD-N9z0Jo3lG", "full URL for playlist to play")
+	skipInit    = flag.Bool("skip-init", false, "Assume that YouTube Music is in the foreground and ready to go; causes other various flags to be ignored")
+
+	// Plex flags
+	plexPlaylist   = flag.String("plex-playlist", "Mood 2025-09", "Name of the plex playlist to run the quiz on")
+	browserCommand = flag.String("browser-command", "google-chrome-stable --new-window", "Command to open a new URL in the browser (e.g. `firefox` or `xdg-open`)")
+
 	persistFile   = flag.String("persist-file", "", "Restore from this file (if it exists), as well as store state to this file regularly")
 	persistPeriod = flag.Duration("persist-period", 30*time.Second, "Period between persisting state to --persist-file")
-	browserCommand = flag.String("browser-command", "google-chrome-stable --new-window", "Command to open a new URL in the browser (e.g. `firefox` or `xdg-open`)")
 )
 
 func main() {
 	flag.Parse()
 
-	/////////////////////////////// OLD YTM SETUP
-	// ctx := context.Background()
-	// wrs, err := oslevelinput.OpenAllWrite()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// var keyboard oslevelinput.Writer
-	// if len(wrs) == 1 {
-	// 	for _, keyboard = range wrs {
-	// 	}
-	// } else {
-	// 	if len(flag.Args()) != 1 {
-	// 		log.Fatalf("WHICH TO PICK? %q", slices.Sorted(maps.Keys(wrs)))
-	// 	}
-	// 	var ok bool
-	// 	if keyboard, ok = wrs[flag.Args()[0]]; !ok {
-	// 		log.Fatalf("%q not found; options: %v", flag.Args()[0], slices.Sorted(maps.Keys(wrs)))
-	// 	}
-	// }
-	// mouse, err := oslevelinput.OpenMouseWriter("/dev/input/event0")
-	// if err != nil {
-	// 	log.Fatal("opening mouse: ", err)
-	// }
+	var player mqgame.MusicPlayer
 
-	// // TODO DO NOT SUBMIT: Replace this with a web gui of some sort?
-	// ytm := ytmgui.New(keyboard)
+	switch *mode {
+	case "ytm":
+		ctx := context.Background()
+		wrs, err := oslevelinput.OpenAllWrite()
+		if err != nil {
+			log.Fatal(err)
+		}
+		var keyboard oslevelinput.Writer
+		if len(wrs) == 1 {
+			for _, keyboard = range wrs {
+			}
+		} else {
+			if len(flag.Args()) != 1 {
+				log.Fatalf("WHICH TO PICK? %q", slices.Sorted(maps.Keys(wrs)))
+			}
+			var ok bool
+			if keyboard, ok = wrs[flag.Args()[0]]; !ok {
+				log.Fatalf("%q not found; options: %v", flag.Args()[0], slices.Sorted(maps.Keys(wrs)))
+			}
+		}
+		mouse, err := oslevelinput.OpenMouseWriter("/dev/input/event0")
+		if err != nil {
+			log.Fatal("opening mouse: ", err)
+		}
 
-	// if *skipInit {
-	// 	log.Printf("Skipping initialization; please have ytm open in its own window, in the foreground, with the playlist ready to go; don't forget shuffle!")
-	// } else {
-	// 	setupCtx, cf := context.WithTimeout(ctx, 2*time.Minute)
-	// 	defer cf()
-	// 	if err := ytm.InitialSetup(setupCtx, mouse, *playlistURL); err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// }
-	///////////////////////////////
+		ytm := ytmgui.New(keyboard)
 
-	/////////////////////////////// NEW YTM SETUP
-	// ytm := ytmgui.NewEmbedPlayer()
-	///////////////////////////////
-
-	/////////////////////////////// NEW PLEX SETUP
-	plex, err := plexgui.NewPlexPlayer(*plexPlaylist)
-	if err != nil {
-		log.Fatalln("Error initializing plex connection:", err)
+		if *skipInit {
+			log.Printf("Skipping initialization; please have ytm open in its own window, in the foreground, with the playlist ready to go; don't forget shuffle!")
+		} else {
+			setupCtx, cf := context.WithTimeout(ctx, 2*time.Minute)
+			defer cf()
+			if err := ytm.InitialSetup(setupCtx, mouse, *playlistURL); err != nil {
+				log.Fatal(err)
+			}
+		}
+		player = ytm
+	case "ytmembed":
+		player = ytmgui.NewEmbedPlayer()
+	case "plex":
+		plex, err := plexgui.NewPlexPlayer(*plexPlaylist)
+		if err != nil {
+			log.Fatalln("Error initializing plex connection:", err)
+		}
+		player = plex
+	default:
+		log.Fatalf("Unrecognized mode: %s\n", *mode)
 	}
-	///////////////////////////////
 
 	var state *mqgame.State
 	if *persistFile == "" {
-		state = mqgame.NewState(plex)
+		state = mqgame.NewState(player)
 		goto ready
 	}
 	if data, err := os.ReadFile(*persistFile); err != nil {
@@ -99,8 +107,8 @@ func main() {
 			log.Fatalf("Failed reading %v: %v", *persistFile, err)
 		}
 		log.Printf("Creating fresh state (file %v had error %v)", *persistFile, err)
-		state = mqgame.NewState(plex)
-	} else if state, err = mqgame.RestoreState(plex, data); err != nil {
+		state = mqgame.NewState(player)
+	} else if state, err = mqgame.RestoreState(player, data); err != nil {
 		log.Fatalf("Failed to restore from %v: %v", *persistFile, err)
 	} else {
 		log.Printf("Restored state from %v", *persistFile)
@@ -135,5 +143,5 @@ ready:
 	if localIp == "" {
 		log.Fatalf("couldn't get local IP address")
 	}
-	mqhttpui.Run(mqhttpui.MultiguessGame{}, state, plex, localIp + ":1123", localIp, browserCommand)
+	mqhttpui.Run(mqhttpui.MultiguessGame{}, state, player, localIp+":1123", localIp, browserCommand)
 }

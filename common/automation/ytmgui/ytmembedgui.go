@@ -1,6 +1,14 @@
-// tymgui exposes a global interface to control the website of YouTube Music
-// via keyboard controls. Thus it requires you to be logged in and ready to
-// play music.
+// ytmembedgui exposes a global interface to control the website of YouTube Music
+// via an embedded iframe player.
+//
+// ===== WARNING =====
+// Unfortunately, this doesn't work on most videos -- many monetized videos or music
+// videos are blocked from being embedded, or 'blocked in your country', such that
+// while this embedded player may *technically* work, it doesn't work in practice
+// to allow any music quiz that you'd actually want to play (you could guess at white
+// noise, I suppose).
+// ===== WARNING =====
+
 package ytmgui
 
 import (
@@ -36,7 +44,7 @@ func NewEmbedPlayer() *EmbedMusicPlayer {
 	}
 }
 
-func InitEmbedGui(server *http.ServeMux, mp *EmbedMusicPlayer, addr string, browserCommand *string) {
+func (mp *EmbedMusicPlayer) InitGui(server *http.ServeMux, addr string, browserCommand *string) {
 	// Serve the HTML/JS for the host page
 	server.HandleFunc("/host", func(wr http.ResponseWriter, req *http.Request) {
 		hostTemplate.Execute(wr, "unused initial data")
@@ -48,7 +56,7 @@ func InitEmbedGui(server *http.ServeMux, mp *EmbedMusicPlayer, addr string, brow
 	// Launch the first host page
 	url := "http://" + addr + "/host"
 	log.Printf("Launching browser at '%s'...", url)
-	cmd := exec.Command("/bin/sh", "-c", *browserCommand + " " + url)
+	cmd := exec.Command("/bin/sh", "-c", *browserCommand+" "+url)
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 	if err := cmd.Start(); err != nil {
