@@ -147,6 +147,26 @@ func (plex *PlexConnection) ListPlaylistContents(playlist Playlist) (*[]Track, e
 	return &tracks, nil
 }
 
+func (plex *PlexConnection) SearchTracks(song string) (*[]Track, error) {
+	// Search for a song
+	var output PlexResponse
+	u := "/library/all?mediaQuery=type=track&title="+url.QueryEscape(song)
+	// fmt.Println("Querying:", u)
+	err := pmsReq(plex, "GET", u, &output)
+	if err != nil {
+		fmt.Println("Error searching for a song:", err)
+		return nil, err
+	}
+
+	// Collate results
+	tracks := make([]Track, output.MediaContainer.Size)
+	for i := range output.MediaContainer.Size {
+		t := output.MediaContainer.Metadata[0]
+		tracks[i] = Track{Title: t.Title, Artist: t.GrandparentTitle, Album: t.ParentTitle}
+	}
+	return &tracks, nil
+}
+
 // TODO DO NOT SUBMIT: Just return the stream URL?
 func (plex *PlexConnection) DownloadSong(song string, outfile string) {
 	// Search for a song
